@@ -1,15 +1,16 @@
-use sdl2::rect::{Point, Rect};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use crate::config::Layout;
+use crate::sprites::{Error, Rect};
+use crate::sprites::{
+    FlagStateListener, GameState, GameStateListener, Sprite, TileListener, WeakTraitWrapper,
+};
 
-use super::sprites::Error;
-use crate::sprites::WeakTraitWrapper;
-use crate::sprites::{FlagStateListener, GameState, GameStateListener, TileListener};
-use crate::sprites::{MouseEvent, MouseHandler, Renderer, RendererContext, Sprite};
+use crate::sprites::{MouseEvent, MouseHandler};
+use crate::sprites::{Renderer, RendererContext};
 
-pub trait TileSprite<'a>: Sprite<'a> {
+pub trait TileSprite: Sprite {
     fn reset(&self, is_mine: bool, adjacent_mines: u8);
     fn game_state_changed(&self, state: GameState);
 }
@@ -22,7 +23,7 @@ pub struct Tile {
     adjacent_flags: Cell<u8>,
     flag_remaining: Cell<bool>,
     is_game_over: Cell<bool>,
-    bounding_box: sdl2::rect::Rect,
+    bounding_box: Rect,
     listeners: RefCell<Vec<WeakTraitWrapper<dyn TileListener>>>,
 }
 
@@ -103,22 +104,22 @@ impl Tile {
     }
 }
 
-impl<'a> Renderer<'_> for Tile {
+impl Renderer for Tile {
     fn render(&self, context: &mut dyn RendererContext) -> Result<(), Error> {
         if self.is_revealed.get() {
             if self.is_mine.get() {
                 let image = context.load("tile_mine")?;
-                context.canvas().copy(&image, None, self.bounding_box)?;
+                context.render_image(&image, None, self.bounding_box)?;
             } else {
                 let image = context.load_tile(self.adjacent_mines.get() as u64)?;
-                context.canvas().copy(&image, None, self.bounding_box)?;
+                context.render_image(&image, None, self.bounding_box)?;
             }
         } else if self.is_flagged.get() {
             let image = context.load("tile_flag")?;
-            context.canvas().copy(&image, None, self.bounding_box)?;
+            context.render_image(&image, None, self.bounding_box)?;
         } else {
             let image = context.load("tile")?;
-            context.canvas().copy(&image, None, self.bounding_box)?;
+            context.render_image(&image, None, self.bounding_box)?;
         }
         Ok(())
     }
@@ -126,8 +127,7 @@ impl<'a> Renderer<'_> for Tile {
 
 impl MouseHandler for Tile {
     fn hit_test(&self, event: &MouseEvent) -> bool {
-        self.bounding_box
-            .contains_point(Point::new(event.x, event.y))
+        self.bounding_box.contains_point((event.x, event.y))
     }
     fn handle_event(&self, event: &MouseEvent) {
         match event.mouse_btn {
@@ -158,9 +158,9 @@ impl GameStateListener for Tile {
     }
 }
 
-impl<'a> Sprite<'_> for Tile {}
+impl Sprite for Tile {}
 
-impl<'a> TileSprite<'_> for Tile {
+impl TileSprite for Tile {
     fn reset(&self, is_mine: bool, adjacent_mines: u8) {
         self.is_mine.set(is_mine);
         self.adjacent_mines.set(adjacent_mines);
@@ -170,7 +170,7 @@ impl<'a> TileSprite<'_> for Tile {
     }
 }
 
-impl<'a> TileListener for Tile {
+impl TileListener for Tile {
     fn reveal(&self, is_mine: bool, has_adjacent_mines: bool) {
         if !is_mine && !has_adjacent_mines {
             self.try_reveal();

@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use crate::config::Layout;
 
-use super::sprites::Error;
+use crate::sprites::Error;
 use crate::sprites::WeakTraitWrapper;
 use crate::sprites::{FlagStateListener, GameState, GameStateListener, TileListener};
 use crate::sprites::{MouseHandler, Renderer, RendererContext, Sprite};
@@ -36,12 +36,12 @@ impl FlagCounter {
     }
 }
 
-impl<'a> Renderer<'_> for FlagCounter {
+impl Renderer for FlagCounter {
     fn render(&self, context: &mut dyn RendererContext) -> Result<(), Error> {
         let value = self.flags.get();
         let image = context.load("digit_panel")?;
         let bounding_box = context.layout().flag_digit_panel();
-        context.canvas().copy(&image, None, bounding_box)?;
+        context.render_image(&image, None, bounding_box)?;
 
         let ones = value % 10;
         let tens = value / 10 % 10;
@@ -67,7 +67,7 @@ impl GameStateListener for FlagCounter {
     }
 }
 
-impl<'a> Sprite<'_> for FlagCounter {}
+impl Sprite for FlagCounter {}
 
 impl TileListener for FlagCounter {
     fn flag(&self, flagged: bool) {

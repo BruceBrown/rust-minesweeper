@@ -1,21 +1,33 @@
-use sdl2::render::{Texture, WindowCanvas};
 use snafu::Snafu;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use crate::config::Layout;
+use crate::sprites::manager::Texture;
 
-use std::rc::Weak;
+#[cfg(feature = "media_layer_sdl2")]
+mod sdl2_details;
+
+#[cfg(feature = "media_layer_sdl2")]
+pub use sdl2_details::{Canvas, Point, Rect, TextureCache};
+
+#[cfg(feature = "media_layer_text")]
+mod text_details;
+
+#[cfg(feature = "media_layer_text")]
+pub use text_details::{Canvas, Point, Rect, TextureCache};
+
 pub type TraitWrapper<T> = Box<Rc<T>>;
 pub type WeakTraitWrapper<T> = Box<Weak<T>>;
 pub type WeakTrait<T> = Weak<T>;
 
 pub fn render_digit(
     digit: u64,
-    bounding_box: sdl2::rect::Rect,
+    bounding_box: Rect,
     context: &mut dyn RendererContext,
 ) -> Result<(), String> {
     let image = context.load_digit(digit)?;
-    context.canvas().copy(&image, None, bounding_box)?;
+    //context.canvas().copy(&image, None, bounding_box)?;
+    context.render_image(&image, None, bounding_box)?;
     Ok(())
 }
 
@@ -50,14 +62,19 @@ impl std::convert::From<String> for Error {
 // common traits
 
 pub trait RendererContext<'a> {
+    fn render_image(
+        &mut self,
+        texture: &Texture<'a>,
+        src: Option<Rect>,
+        dst: Rect,
+    ) -> Result<(), String>;
     fn layout(&mut self) -> &Layout;
-    fn canvas(&mut self) -> &mut WindowCanvas;
     fn load(&mut self, name: &str) -> Result<Rc<Texture<'a>>, String>;
     fn load_digit(&mut self, value: u64) -> Result<Rc<Texture<'a>>, String>;
     fn load_tile(&mut self, value: u64) -> Result<Rc<Texture<'a>>, String>;
 }
 
-pub trait Renderer<'a> {
+pub trait Renderer {
     fn render(&self, _context: &mut dyn RendererContext) -> Result<(), Error> {
         Ok(())
     }
@@ -90,27 +107,30 @@ pub trait MouseHandler {
     fn handle_event(&self, _event: &MouseEvent) {}
 }
 
-pub trait Sprite<'a>: Renderer<'a> + MouseHandler {}
+pub trait Sprite: Renderer + MouseHandler {}
 
 // the rendering context
-use super::manager::TextureManager;
-use sdl2::video::WindowContext;
 
 pub struct RenderContext<'a> {
     pub layout: Rc<Layout>,
-    pub canvas: WindowCanvas,
-    pub texture_manager: TextureManager<'a, WindowContext>,
+    pub canvas: Canvas,
+    pub texture_manager: TextureCache<'a>,
     pub digits: [&'a str; 10],
     pub tiles: [&'a str; 9],
 }
 
 impl<'a> RendererContext<'a> for RenderContext<'a> {
-    fn layout(&mut self) -> &Layout {
-        &self.layout
+    fn render_image(
+        &mut self,
+        texture: &Texture<'a>,
+        src: Option<Rect>,
+        dst: Rect,
+    ) -> Result<(), String> {
+        self.canvas.copy(texture, src, dst)
     }
 
-    fn canvas(&mut self) -> &mut WindowCanvas {
-        &mut self.canvas
+    fn layout(&mut self) -> &Layout {
+        &self.layout
     }
 
     fn load(&mut self, name: &str) -> Result<Rc<Texture<'a>>, String> {

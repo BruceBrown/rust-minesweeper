@@ -1,11 +1,10 @@
-use sdl2::rect::{Point, Rect};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use crate::config::Layout;
 
-use super::sprites::Error;
 use crate::sprites::WeakTraitWrapper;
+use crate::sprites::{Error, Rect};
 use crate::sprites::{GameState, GameStateListener, TileListener};
 use crate::sprites::{MouseEvent, MouseHandler, Renderer, RendererContext, Sprite};
 
@@ -42,7 +41,7 @@ impl Button {
     }
 }
 
-impl<'a> Renderer<'_> for Button {
+impl Renderer for Button {
     fn render(&self, context: &mut dyn RendererContext) -> Result<(), Error> {
         let name = match self.game_state.get() {
             GameState::Init => "face_playing",
@@ -51,14 +50,13 @@ impl<'a> Renderer<'_> for Button {
             GameState::Lose => "face_lose",
         };
         let image = context.load(name)?;
-        context.canvas().copy(&image, None, self.bounding_box)?;
+        context.render_image(&image, None, self.bounding_box)?;
         Ok(())
     }
 }
 impl MouseHandler for Button {
     fn hit_test(&self, event: &MouseEvent) -> bool {
-        self.bounding_box
-            .contains_point(Point::new(event.x, event.y))
+        self.bounding_box.contains_point((event.x, event.y))
     }
     fn handle_event(&self, event: &MouseEvent) {
         if event.mouse_btn == sdl2::mouse::MouseButton::Left {
@@ -69,7 +67,7 @@ impl MouseHandler for Button {
     }
 }
 
-impl<'a> Sprite<'_> for Button {}
+impl Sprite for Button {}
 
 impl TileListener for Button {
     fn reveal(&self, is_mine: bool, _has_adjacent_mines: bool) {

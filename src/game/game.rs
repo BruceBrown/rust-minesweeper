@@ -1,20 +1,20 @@
-use crate::config::Layout;
-use crate::sprites::{Background, Button, FlagCounter, Grid, Timer};
 use std::rc::Rc;
 
+use crate::config::Layout;
+use crate::sprites::{Background, Button, FlagCounter, Grid, Timer};
 use crate::sprites::{MouseEvent, MouseHandler, Renderer, RendererContext, Sprite};
 
-pub struct Game<'a> {
-    sprites: Vec<TraitWrapper<dyn Sprite<'a>>>,
+pub struct Game {
+    sprites: Vec<TraitWrapper<dyn Sprite>>,
 }
 
 use crate::sprites::Error;
 use crate::sprites::{FlagStateListener, GameStateListener, TileListener};
 use crate::sprites::{TraitWrapper, WeakTrait, WeakTraitWrapper};
 
-impl<'a> Game<'_> {
+impl Game {
     pub fn new(layout: &Rc<Layout>) -> Game {
-        // create theunderlying objects
+        // create the underlying objects
         let bg = Rc::new(Background {});
         let timer = Rc::new(Timer::new());
         let flag_counter = Rc::new(FlagCounter::new(layout));
@@ -54,7 +54,7 @@ impl<'a> Game<'_> {
     }
 }
 
-impl Default for Game<'_> {
+impl Default for Game {
     fn default() -> Self {
         Self {
             sprites: Vec::new(),
@@ -62,7 +62,7 @@ impl Default for Game<'_> {
     }
 }
 
-impl<'a> Renderer<'_> for Game<'_> {
+impl Renderer for Game {
     fn render(&self, context: &mut dyn RendererContext) -> Result<(), Error> {
         for sprite in self.sprites.iter() {
             sprite.render(context)?;
@@ -71,7 +71,7 @@ impl<'a> Renderer<'_> for Game<'_> {
     }
 }
 
-impl MouseHandler for Game<'_> {
+impl MouseHandler for Game {
     fn hit_test(&self, _event: &MouseEvent) -> bool {
         false
     }

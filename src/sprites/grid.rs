@@ -1,25 +1,27 @@
-use sdl2::rect::{Point, Rect};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::{Rc, Weak};
 
 use crate::config::Layout;
-
-use super::sprites::Error;
-use crate::sprites::{FlagStateListener, GameState, GameStateListener, TileListener};
-use crate::sprites::{MouseEvent, MouseHandler, Renderer, RendererContext, Sprite};
+use crate::sprites::{Error, Rect};
+use crate::sprites::{
+    FlagStateListener, GameState, GameStateListener, Sprite, TileListener, TraitWrapper,
+    WeakTraitWrapper,
+};
 use crate::sprites::{Tile, TileSprite};
-use crate::sprites::{TraitWrapper, WeakTraitWrapper};
 
-pub struct Grid<'a> {
+use crate::sprites::{MouseEvent, MouseHandler};
+use crate::sprites::{Renderer, RendererContext};
+
+pub struct Grid {
     layout: Rc<Layout>,
     bounding_box: Rect,
-    tile_sprites: Vec<TraitWrapper<dyn TileSprite<'a>>>,
+    tile_sprites: Vec<TraitWrapper<dyn TileSprite>>,
     flag_state_listeners: Vec<WeakTraitWrapper<dyn FlagStateListener>>,
     minefield: RefCell<Minefield>,
 }
 
-impl Grid<'_> {
+impl Grid {
     pub fn new(layout: &Rc<Layout>) -> Self {
         let bounding_box = layout.grid();
         let minefield = RefCell::new(Minefield::new(layout));
@@ -80,7 +82,7 @@ impl Grid<'_> {
     }
 }
 
-impl<'a> Renderer<'_> for Grid<'a> {
+impl Renderer for Grid {
     fn render(&self, context: &mut dyn RendererContext) -> Result<(), Error> {
         for sprite in self.tile_sprites.iter() {
             sprite.render(context)?;
@@ -89,22 +91,21 @@ impl<'a> Renderer<'_> for Grid<'a> {
     }
 }
 
-impl<'a> MouseHandler for Grid<'a> {
+impl MouseHandler for Grid {
     fn hit_test(&self, event: &MouseEvent) -> bool {
-        self.bounding_box
-            .contains_point(Point::new(event.x, event.y))
+        self.bounding_box.contains_point((event.x, event.y))
     }
     fn handle_event(&self, event: &MouseEvent) {
-        let column = (event.x - self.bounding_box.x()) / Layout::tile_side() as i32;
-        let row = (event.y - self.bounding_box.y()) / Layout::tile_side() as i32;
+        let column = (event.x - self.bounding_box.left()) / Layout::tile_side() as i32;
+        let row = (event.y - self.bounding_box.top()) / Layout::tile_side() as i32;
         let index = self.layout.options.index(row as i16, column as i16) as usize;
         self.tile_sprites[index].handle_event(event);
     }
 }
 
-impl<'a> Sprite<'_> for Grid<'a> {}
+impl Sprite for Grid {}
 
-impl<'a> GameStateListener for Grid<'a> {
+impl GameStateListener for Grid {
     fn game_state_changed(&self, state: GameState) {
         if state == GameState::Init {
             self.minefield.borrow_mut().reset();
@@ -121,7 +122,7 @@ impl<'a> GameStateListener for Grid<'a> {
     }
 }
 
-impl<'a> FlagStateListener for Grid<'a> {
+impl FlagStateListener for Grid {
     fn flag_state_changed(&self, exhausted: bool) {
         for listener in self.flag_state_listeners.iter() {
             listener.upgrade().unwrap().flag_state_changed(exhausted);

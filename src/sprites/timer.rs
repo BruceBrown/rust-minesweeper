@@ -48,7 +48,7 @@ impl GameStateListener for Timer {
     }
 }
 
-impl<'a> Renderer<'_> for Timer {
+impl Renderer for Timer {
     fn render(&self, context_: &mut dyn RendererContext) -> Result<(), Error> {
         let elapsed = if self.running.get() {
             self.start
@@ -63,7 +63,7 @@ impl<'a> Renderer<'_> for Timer {
         };
         let image = context_.load("digit_panel")?;
         let bounding_box = context_.layout().timer_digit_panel();
-        context_.canvas().copy(&image, None, bounding_box)?;
+        context_.render_image(&image, None, bounding_box)?;
 
         let ones = elapsed % 10;
         let tens = elapsed / 10 % 10;
@@ -78,4 +78,4 @@ impl<'a> Renderer<'_> for Timer {
 
 impl MouseHandler for Timer {}
 
-impl<'a> Sprite<'_> for Timer {}
+impl Sprite for Timer {}

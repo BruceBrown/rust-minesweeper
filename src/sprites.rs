@@ -1,7 +1,8 @@
 pub mod sprites;
 pub use sprites::render_digit;
-pub use sprites::Error;
 pub use sprites::StartTimeInvalid;
+pub use sprites::{Canvas, TextureCache};
+pub use sprites::{Error, Point, Rect};
 pub use sprites::{FlagStateListener, GameState, GameStateListener, TileListener};
 pub use sprites::{MouseEvent, MouseHandler, RenderContext, Renderer, RendererContext, Sprite};
 pub use sprites::{TraitWrapper, WeakTrait, WeakTraitWrapper};
@@ -25,4 +26,7 @@ pub mod tile;
 pub use tile::{Tile, TileSprite};
 
 pub mod manager;
-pub use manager::TextureManager;
+pub use manager::{Texture, TextureManager};
+
+#[cfg(feature = "media_layer_text")]
+pub use manager::StringCreator;
