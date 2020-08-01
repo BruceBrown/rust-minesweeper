@@ -14,7 +14,7 @@ use crate::sprites::{MouseEvent, MouseHandler};
 use crate::sprites::{Renderer, RendererContext};
 
 pub struct Grid {
-    layout: Rc<Layout>,
+    layout: Layout,
     bounding_box: Rect,
     tile_sprites: Vec<TraitWrapper<dyn TileSprite>>,
     flag_state_listeners: Vec<WeakTraitWrapper<dyn FlagStateListener>>,
@@ -22,13 +22,13 @@ pub struct Grid {
 }
 
 impl Grid {
-    pub fn new(layout: &Rc<Layout>) -> Self {
+    pub fn new(layout: Layout) -> Self {
         let bounding_box = layout.grid();
         let minefield = RefCell::new(Minefield::new(layout));
         minefield.borrow_mut().reset();
 
         Self {
-            layout: Rc::clone(layout),
+            layout: layout,
             bounding_box: bounding_box,
             //tile_listeners: Vec::new(),
             tile_sprites: Vec::new(),
@@ -43,7 +43,7 @@ impl Grid {
         // first build the vector of tiles, we need this to get trait vectors
         for index in 0..tile_count {
             let bounding_box = self.layout.tile(self.bounding_box, index);
-            let tile = Box::new(Rc::new(Tile::new(&self.layout, bounding_box)));
+            let tile = Box::new(Rc::new(Tile::new(self.layout, bounding_box)));
 
             let adjacent_mines = self.minefield.borrow().adjacent_mines(index as u16);
             let is_mine = self.minefield.borrow().mine_at(index);
@@ -83,7 +83,7 @@ impl Grid {
 }
 
 impl Renderer for Grid {
-    fn render(&self, context: &mut dyn RendererContext) -> Result<(), Error> {
+    fn render(&self, context: &dyn RendererContext) -> Result<(), Error> {
         for sprite in self.tile_sprites.iter() {
             sprite.render(context)?;
         }
@@ -131,16 +131,16 @@ impl FlagStateListener for Grid {
 }
 
 struct Minefield {
-    layout: Rc<Layout>,
+    layout: Layout,
     mines: BTreeSet<i16>,
 }
 
 use rand::prelude::*;
 
 impl Minefield {
-    pub fn new(layout: &Rc<Layout>) -> Self {
+    pub fn new(layout: Layout) -> Self {
         let mut obj = Self {
-            layout: Rc::clone(layout),
+            layout: layout,
             mines: BTreeSet::new(),
         };
         obj.reset();

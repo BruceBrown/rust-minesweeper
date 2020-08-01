@@ -7,23 +7,25 @@ use crate::sprites::StartTimeInvalid;
 use crate::sprites::{GameState, GameStateListener};
 use crate::sprites::{MouseHandler, Renderer, RendererContext, Sprite};
 
-pub struct Timer {
+use crate::sprites::SystemTime;
+
+pub struct TimeCounter {
     elapsed: Cell<u64>,
     running: Cell<bool>,
-    start: Cell<std::time::SystemTime>,
+    start: Cell<SystemTime>,
 }
 
-impl Timer {
+impl TimeCounter {
     pub fn new() -> Self {
         Self {
             elapsed: Cell::new(0),
             running: Cell::new(false),
-            start: Cell::new(std::time::SystemTime::now()),
+            start: Cell::new(SystemTime::now()),
         }
     }
 }
 
-impl GameStateListener for Timer {
+impl GameStateListener for TimeCounter {
     fn game_state_changed(&self, state: GameState) {
         match state {
             GameState::Init => {
@@ -32,7 +34,7 @@ impl GameStateListener for Timer {
             }
             GameState::Playing => {
                 self.running.set(true);
-                self.start.set(std::time::SystemTime::now());
+                self.start.set(SystemTime::now());
             }
             GameState::Win => {
                 self.running.set(false);
@@ -48,15 +50,18 @@ impl GameStateListener for Timer {
     }
 }
 
-impl Renderer for Timer {
-    fn render(&self, context_: &mut dyn RendererContext) -> Result<(), Error> {
+impl Renderer for TimeCounter {
+    fn render(&self, context_: &dyn RendererContext) -> Result<(), Error> {
         let elapsed = if self.running.get() {
             self.start
                 .get()
                 .elapsed()
+                /*
                 .context(StartTimeInvalid {
                     start: self.start.get(),
                 })?
+                */
+                .unwrap()
                 .as_secs()
         } else {
             self.elapsed.get()
@@ -76,6 +81,6 @@ impl Renderer for Timer {
     }
 }
 
-impl MouseHandler for Timer {}
+impl MouseHandler for TimeCounter {}
 
-impl Sprite for Timer {}
+impl Sprite for TimeCounter {}

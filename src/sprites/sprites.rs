@@ -2,19 +2,9 @@ use snafu::Snafu;
 use std::rc::{Rc, Weak};
 
 use crate::config::Layout;
-use crate::sprites::manager::Texture;
+use crate::media_layer::Texture;
 
-#[cfg(feature = "media_layer_sdl2")]
-mod sdl2_details;
-
-#[cfg(feature = "media_layer_sdl2")]
-pub use sdl2_details::{Canvas, Point, Rect, TextureCache};
-
-#[cfg(feature = "media_layer_text")]
-mod text_details;
-
-#[cfg(feature = "media_layer_text")]
-pub use text_details::{Canvas, Point, Rect, TextureCache};
+pub use super::{Point, Rect, SystemTime};
 
 pub type TraitWrapper<T> = Box<Rc<T>>;
 pub type WeakTraitWrapper<T> = Box<Weak<T>>;
@@ -23,10 +13,9 @@ pub type WeakTrait<T> = Weak<T>;
 pub fn render_digit(
     digit: u64,
     bounding_box: Rect,
-    context: &mut dyn RendererContext,
+    context: &dyn RendererContext,
 ) -> Result<(), String> {
     let image = context.load_digit(digit)?;
-    //context.canvas().copy(&image, None, bounding_box)?;
     context.render_image(&image, None, bounding_box)?;
     Ok(())
 }
@@ -59,27 +48,6 @@ impl std::convert::From<String> for Error {
     }
 }
 
-// common traits
-
-pub trait RendererContext<'a> {
-    fn render_image(
-        &mut self,
-        texture: &Texture<'a>,
-        src: Option<Rect>,
-        dst: Rect,
-    ) -> Result<(), String>;
-    fn layout(&mut self) -> &Layout;
-    fn load(&mut self, name: &str) -> Result<Rc<Texture<'a>>, String>;
-    fn load_digit(&mut self, value: u64) -> Result<Rc<Texture<'a>>, String>;
-    fn load_tile(&mut self, value: u64) -> Result<Rc<Texture<'a>>, String>;
-}
-
-pub trait Renderer {
-    fn render(&self, _context: &mut dyn RendererContext) -> Result<(), Error> {
-        Ok(())
-    }
-}
-
 pub trait GameStateListener {
     fn game_state_changed(&self, state: GameState);
 }
@@ -94,10 +62,18 @@ pub trait TileListener {
     fn flag(&self, _is_flagged: bool) {}
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum MouseButton {
+    Left,
+    Middle,
+    Right,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct MouseEvent {
     pub x: i32,
     pub y: i32,
-    pub mouse_btn: sdl2::mouse::MouseButton,
+    pub mouse_btn: MouseButton,
 }
 
 pub trait MouseHandler {
@@ -109,43 +85,16 @@ pub trait MouseHandler {
 
 pub trait Sprite: Renderer + MouseHandler {}
 
-// the rendering context
-
-pub struct RenderContext<'a> {
-    pub layout: Rc<Layout>,
-    pub canvas: Canvas,
-    pub texture_manager: TextureCache<'a>,
-    pub digits: [&'a str; 10],
-    pub tiles: [&'a str; 9],
+pub trait RendererContext {
+    fn render_image(&self, texture: &Texture, src: Option<Rect>, dst: Rect) -> Result<(), String>;
+    fn layout(&self) -> &Layout;
+    fn load(&self, name: &str) -> Result<Rc<Texture>, String>;
+    fn load_digit(&self, value: u64) -> Result<Rc<Texture>, String>;
+    fn load_tile(&self, value: u64) -> Result<Rc<Texture>, String>;
 }
 
-impl<'a> RendererContext<'a> for RenderContext<'a> {
-    fn render_image(
-        &mut self,
-        texture: &Texture<'a>,
-        src: Option<Rect>,
-        dst: Rect,
-    ) -> Result<(), String> {
-        self.canvas.copy(texture, src, dst)
-    }
-
-    fn layout(&mut self) -> &Layout {
-        &self.layout
-    }
-
-    fn load(&mut self, name: &str) -> Result<Rc<Texture<'a>>, String> {
-        self.texture_manager.load(name)
-    }
-
-    fn load_digit(&mut self, value: u64) -> Result<Rc<Texture<'a>>, String> {
-        let name = self.digits[value as usize];
-        let image_name = format!("digit_{}", name);
-        self.load(&image_name)
-    }
-
-    fn load_tile(&mut self, value: u64) -> Result<Rc<Texture<'a>>, String> {
-        let name = self.tiles[value as usize];
-        let image_name = format!("tile_{}", name);
-        self.load(&image_name)
+pub trait Renderer {
+    fn render(&self, _context: &dyn RendererContext) -> Result<(), Error> {
+        Ok(())
     }
 }

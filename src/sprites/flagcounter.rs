@@ -1,5 +1,4 @@
 use std::cell::{Cell, RefCell};
-use std::rc::Rc;
 
 use crate::config::Layout;
 
@@ -11,15 +10,15 @@ use crate::sprites::{MouseHandler, Renderer, RendererContext, Sprite};
 use crate::sprites::render_digit;
 
 pub struct FlagCounter {
-    layout: Rc<Layout>,
+    layout: Layout,
     flags: Cell<i16>,
     flag_state_listeners: RefCell<Vec<WeakTraitWrapper<dyn FlagStateListener>>>,
 }
 
 impl FlagCounter {
-    pub fn new(layout: &Rc<Layout>) -> FlagCounter {
+    pub fn new(layout: Layout) -> FlagCounter {
         FlagCounter {
-            layout: Rc::clone(layout),
+            layout: layout,
             flags: Cell::new(layout.options.mines()),
             flag_state_listeners: RefCell::new(Vec::new()),
         }
@@ -37,7 +36,7 @@ impl FlagCounter {
 }
 
 impl Renderer for FlagCounter {
-    fn render(&self, context: &mut dyn RendererContext) -> Result<(), Error> {
+    fn render(&self, context: &dyn RendererContext) -> Result<(), Error> {
         let value = self.flags.get();
         let image = context.load("digit_panel")?;
         let bounding_box = context.layout().flag_digit_panel();

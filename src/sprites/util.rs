@@ -1,8 +1,3 @@
-use std::option::Option;
-use std::rc::Rc;
-
-use crate::sprites::manager::{Texture, TextureManager};
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Rect {
     x: i32,
@@ -39,6 +34,16 @@ impl Rect {
         self.y + self.height as i32
     }
 
+    /// Returns the width of this rectangle.
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    /// Returns the height of this rectangle.
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
     pub fn contains_point<P>(&self, point: P) -> bool
     where
         P: Into<(i32, i32)>,
@@ -67,25 +72,21 @@ impl From<(i32, i32)> for Point {
     }
 }
 
-pub struct Canvas {}
-impl Canvas {
-    pub fn present(&mut self) {}
-    pub fn copy<R1, R2>(&mut self, texture: &Texture, _src: R1, _dst: R2) -> Result<(), String>
-    where
-        R1: Into<Option<Rect>>,
-        R2: Into<Option<Rect>>,
-    {
-        println!("{}", texture.texture);
-        Ok(())
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub struct SystemTime {
+    pub time: u64,
+}
+
+impl SystemTime {
+    pub fn now() -> Self {
+        Self {
+            time: js_sys::Date::now() as u64,
+        }
     }
-}
 
-pub struct TextureCache<'a> {
-    pub texture_manager: TextureManager<'a>,
-}
-
-impl<'a> TextureCache<'a> {
-    pub fn load(&mut self, name: &str) -> Result<Rc<Texture<'a>>, String> {
-        self.texture_manager.load(name)
+    pub fn elapsed(&self) -> Result<std::time::Duration, std::time::SystemTimeError> {
+        Ok(std::time::Duration::from_millis(
+            js_sys::Date::now() as u64 - self.time,
+        ))
     }
 }

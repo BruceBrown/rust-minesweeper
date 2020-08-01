@@ -1,2 +1,11 @@
 # rust-minesweeper
-minesweeper port to rust, using sdl2. This is used to learn rust.
+This was a learning project for me.
+
+Its a port of minesweeper, which I previously ported into go.
+
+Run locally, with SDL2:
+cargo run --no-default-features --features media_layer_sdl2
+
+To run in a browser via webassembly:
+nmp run serve
+

@@ -5,7 +5,7 @@ use crate::sprites::{Error, MouseHandler, Renderer, RendererContext, Sprite};
 pub struct Background {}
 
 impl Renderer for Background {
-    fn render(&self, context: &mut dyn RendererContext) -> Result<(), Error> {
+    fn render(&self, context: &dyn RendererContext) -> Result<(), Error> {
         let base = context.layout().options.level();
         let name = format!("bg_{}", base);
         let image = context.load(&name)?;

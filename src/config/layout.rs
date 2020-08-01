@@ -58,23 +58,23 @@ const EXPERT_LAYOUT_CONSTANTS: LayoutConstants = LayoutConstants {
  * Layout holds all of the information and provides all of the layout information for minesweeper. Therer are const layouts for each
  * skill level. In theory, the methods should compile down to constants or a Rect which can be constant.
  */
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Layout {
-    pub options: Options,
-    constants: LayoutConstants,
+    pub options: &'static Options,
+    constants: &'static LayoutConstants,
 }
 
-const BEGINNER_LAYOUT: Layout = Layout {
-    options: super::options::BEGINNER_OPTIONS,
-    constants: BEGINNER_LAYOUT_CONSTANTS,
+pub const BEGINNER_LAYOUT: Layout = Layout {
+    options: &super::options::BEGINNER_OPTIONS,
+    constants: &BEGINNER_LAYOUT_CONSTANTS,
 };
-const INTERMEDIATE_LAYOUT: Layout = Layout {
-    options: super::options::INTERMEDIATE_OPTIONS,
-    constants: INTERMEDIATE_LAYOUT_CONSTANTS,
+pub const INTERMEDIATE_LAYOUT: Layout = Layout {
+    options: &super::options::INTERMEDIATE_OPTIONS,
+    constants: &INTERMEDIATE_LAYOUT_CONSTANTS,
 };
-const EXPERT_LAYOUT: Layout = Layout {
-    options: super::options::EXPERT_OPTIONS,
-    constants: EXPERT_LAYOUT_CONSTANTS,
+pub const EXPERT_LAYOUT: Layout = Layout {
+    options: &super::options::EXPERT_OPTIONS,
+    constants: &EXPERT_LAYOUT_CONSTANTS,
 };
 
 impl Layout {

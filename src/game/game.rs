@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::config::Layout;
-use crate::sprites::{Background, Button, FlagCounter, Grid, Timer};
+use crate::sprites::{Background, Button, FlagCounter, Grid, TimeCounter};
 use crate::sprites::{MouseEvent, MouseHandler, Renderer, RendererContext, Sprite};
 
 pub struct Game {
@@ -13,10 +13,10 @@ use crate::sprites::{FlagStateListener, GameStateListener, TileListener};
 use crate::sprites::{TraitWrapper, WeakTrait, WeakTraitWrapper};
 
 impl Game {
-    pub fn new(layout: &Rc<Layout>) -> Game {
+    pub fn new(layout: Layout) -> Game {
         // create the underlying objects
         let bg = Rc::new(Background {});
-        let timer = Rc::new(Timer::new());
+        let timer = Rc::new(TimeCounter::new());
         let flag_counter = Rc::new(FlagCounter::new(layout));
         let button = Rc::new(Button::new(layout));
         let mut grid = Rc::new(Grid::new(layout));
@@ -63,7 +63,7 @@ impl Default for Game {
 }
 
 impl Renderer for Game {
-    fn render(&self, context: &mut dyn RendererContext) -> Result<(), Error> {
+    fn render(&self, context: &dyn RendererContext) -> Result<(), Error> {
         for sprite in self.sprites.iter() {
             sprite.render(context)?;
         }

@@ -1,5 +1,4 @@
 use std::cell::{Cell, RefCell};
-use std::rc::Rc;
 
 use crate::config::Layout;
 use crate::sprites::{Error, Rect};
@@ -7,7 +6,7 @@ use crate::sprites::{
     FlagStateListener, GameState, GameStateListener, Sprite, TileListener, WeakTraitWrapper,
 };
 
-use crate::sprites::{MouseEvent, MouseHandler};
+use crate::sprites::{MouseButton, MouseEvent, MouseHandler};
 use crate::sprites::{Renderer, RendererContext};
 
 pub trait TileSprite: Sprite {
@@ -28,7 +27,7 @@ pub struct Tile {
 }
 
 impl Tile {
-    pub fn new(_layout: &Rc<Layout>, bounding_box: Rect) -> Tile {
+    pub fn new(_layout: Layout, bounding_box: Rect) -> Tile {
         Tile {
             is_revealed: Cell::new(false),
             is_mine: Cell::new(false),
@@ -105,7 +104,7 @@ impl Tile {
 }
 
 impl Renderer for Tile {
-    fn render(&self, context: &mut dyn RendererContext) -> Result<(), Error> {
+    fn render(&self, context: &dyn RendererContext) -> Result<(), Error> {
         if self.is_revealed.get() {
             if self.is_mine.get() {
                 let image = context.load("tile_mine")?;
@@ -131,14 +130,14 @@ impl MouseHandler for Tile {
     }
     fn handle_event(&self, event: &MouseEvent) {
         match event.mouse_btn {
-            sdl2::mouse::MouseButton::Left => {
+            MouseButton::Left => {
                 if self.is_revealed.get() {
                     self.try_clear();
                 } else {
                     self.try_reveal();
                 }
             }
-            sdl2::mouse::MouseButton::Right => {
+            MouseButton::Right => {
                 self.try_toggle_flag();
             }
             _ => {}

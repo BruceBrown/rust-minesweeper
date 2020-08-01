@@ -1,12 +1,11 @@
 use std::cell::{Cell, RefCell};
-use std::rc::Rc;
 
 use crate::config::Layout;
 
 use crate::sprites::WeakTraitWrapper;
 use crate::sprites::{Error, Rect};
 use crate::sprites::{GameState, GameStateListener, TileListener};
-use crate::sprites::{MouseEvent, MouseHandler, Renderer, RendererContext, Sprite};
+use crate::sprites::{MouseButton, MouseEvent, MouseHandler, Renderer, RendererContext, Sprite};
 
 pub struct Button {
     game_state: Cell<GameState>,
@@ -17,7 +16,7 @@ pub struct Button {
 }
 
 impl Button {
-    pub fn new(layout: &Rc<Layout>) -> Self {
+    pub fn new(layout: Layout) -> Self {
         Self {
             game_state: Cell::new(GameState::Init),
             game_state_listeners: RefCell::new(Vec::new()),
@@ -42,7 +41,7 @@ impl Button {
 }
 
 impl Renderer for Button {
-    fn render(&self, context: &mut dyn RendererContext) -> Result<(), Error> {
+    fn render(&self, context: &dyn RendererContext) -> Result<(), Error> {
         let name = match self.game_state.get() {
             GameState::Init => "face_playing",
             GameState::Playing => "face_playing",
@@ -59,7 +58,7 @@ impl MouseHandler for Button {
         self.bounding_box.contains_point((event.x, event.y))
     }
     fn handle_event(&self, event: &MouseEvent) {
-        if event.mouse_btn == sdl2::mouse::MouseButton::Left {
+        if event.mouse_btn == MouseButton::Left {
             self.game_state.set(GameState::Init);
             self.revealed.set(0);
             self.notify_listeners();
