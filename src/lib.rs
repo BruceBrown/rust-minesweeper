@@ -104,6 +104,7 @@ mod wasm {
         }
     }
 
+
     pub struct Minesweeper {
         canvas: Rc<web_sys::CanvasRenderingContext2d>,
         layout: Layout,
@@ -124,6 +125,7 @@ mod wasm {
                 "none", "one", "two", "three", "four", "five", "six", "seven", "eight",
             ];
             log!("building Minesweeper");
+ 
             Self {
                 canvas: canvas.clone(),
                 layout: layout,
@@ -151,14 +153,7 @@ mod wasm {
         }
 
         fn render_from_cache(&self, resource: &ResourceContainer, left: i32, top: i32) {
-            match resource.get_image_data() {
-                Ok(image_data) => {
-                    let _ = self
-                        .canvas
-                        .put_image_data(&image_data, left as f64, top as f64);
-                }
-                Err(_e) => {}
-            }
+            self.canvas.put_image_data(resource.get_image_data(), left as f64, top as f64);
         }
     }
 
@@ -247,7 +242,6 @@ mod wasm {
         let minesweeper = wasm::Minesweeper::new(&context);
         canvas.set_width(minesweeper.width());
         canvas.set_height(minesweeper.height());
-
         let minesweeper = Rc::new(minesweeper);
         // setup the mouse down hook
         {
