@@ -41,7 +41,6 @@ pub use crate::media_layer::{ResourceContainer, Texture, TextureManager};
 
 pub use crate::sprites::Rect;
 
-
 #[cfg(feature = "media_layer_text")]
 mod text {
     use super::*;
@@ -104,7 +103,6 @@ mod wasm {
         }
     }
 
-
     pub struct Minesweeper {
         canvas: Rc<web_sys::CanvasRenderingContext2d>,
         layout: Layout,
@@ -125,7 +123,7 @@ mod wasm {
                 "none", "one", "two", "three", "four", "five", "six", "seven", "eight",
             ];
             log!("building Minesweeper");
- 
+
             Self {
                 canvas: canvas.clone(),
                 layout: layout,
@@ -153,7 +151,8 @@ mod wasm {
         }
 
         fn render_from_cache(&self, resource: &ResourceContainer, left: i32, top: i32) {
-            self.canvas.put_image_data(resource.get_image_data(), left as f64, top as f64);
+            self.canvas
+                .put_image_data(resource.get_image_data(), left as f64, top as f64);
         }
     }
 

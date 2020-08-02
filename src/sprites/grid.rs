@@ -16,8 +16,8 @@ use crate::sprites::{Renderer, RendererContext};
 pub struct Grid {
     layout: Layout,
     bounding_box: Rect,
-    tile_sprites: Vec<TraitWrapper<dyn TileSprite>>,
-    flag_state_listeners: Vec<WeakTraitWrapper<dyn FlagStateListener>>,
+    tile_sprites: RefCell<Vec<TraitWrapper<dyn TileSprite>>>,
+    flag_state_listeners: RefCell<Vec<WeakTraitWrapper<dyn FlagStateListener>>>,
     minefield: RefCell<Minefield>,
 }
 
@@ -30,14 +30,13 @@ impl Grid {
         Self {
             layout: layout,
             bounding_box: bounding_box,
-            //tile_listeners: Vec::new(),
-            tile_sprites: Vec::new(),
-            flag_state_listeners: Vec::new(),
+            tile_sprites: RefCell::new(Vec::new()),
+            flag_state_listeners: RefCell::new(Vec::new()),
             minefield: minefield,
         }
     }
 
-    pub fn assign_listeners(&mut self, listeners: &Vec<WeakTraitWrapper<dyn TileListener>>) {
+    pub fn assign_listeners(&self, listeners: &Vec<WeakTraitWrapper<dyn TileListener>>) {
         let tile_count = self.layout.options.tiles();
         let mut tiles: Vec<TraitWrapper<Tile>> = Vec::new();
         // first build the vector of tiles, we need this to get trait vectors
@@ -57,7 +56,7 @@ impl Grid {
             let tile_sprite = Rc::clone(&tile) as Rc<dyn TileSprite>;
             tile_sprites.push(Box::new(tile_sprite));
         }
-        self.tile_sprites = tile_sprites;
+        self.tile_sprites.replace(tile_sprites);
 
         // now the FlagStateListeners (which are also tiles)
         let mut flag_state_listeners: Vec<WeakTraitWrapper<dyn FlagStateListener>> = Vec::new();
@@ -65,7 +64,7 @@ impl Grid {
             let listener = Rc::downgrade(&tile) as Weak<dyn FlagStateListener>;
             flag_state_listeners.push(Box::new(listener));
         }
-        self.flag_state_listeners = flag_state_listeners;
+        self.flag_state_listeners.replace(flag_state_listeners);
 
         // finally, build the adjacency network
         for index in 0..tiles.len() {
@@ -84,7 +83,7 @@ impl Grid {
 
 impl Renderer for Grid {
     fn render(&self, context: &dyn RendererContext) -> Result<(), Error> {
-        for sprite in self.tile_sprites.iter() {
+        for sprite in self.tile_sprites.borrow().iter() {
             sprite.render(context)?;
         }
         Ok(())
@@ -99,7 +98,7 @@ impl MouseHandler for Grid {
         let column = (event.x - self.bounding_box.left()) / Layout::tile_side() as i32;
         let row = (event.y - self.bounding_box.top()) / Layout::tile_side() as i32;
         let index = self.layout.options.index(row as i16, column as i16) as usize;
-        self.tile_sprites[index].handle_event(event);
+        self.tile_sprites.borrow()[index].handle_event(event);
     }
 }
 
@@ -109,14 +108,14 @@ impl GameStateListener for Grid {
     fn game_state_changed(&self, state: GameState) {
         if state == GameState::Init {
             self.minefield.borrow_mut().reset();
-            for index in 0..self.tile_sprites.len() {
+            for index in 0..self.tile_sprites.borrow().len() {
                 let minefield = self.minefield.borrow();
                 let is_mine = minefield.mine_at(index as i16);
                 let adjacent_mines = minefield.adjacent_mines(index as u16);
-                self.tile_sprites[index].reset(is_mine, adjacent_mines);
+                self.tile_sprites.borrow()[index].reset(is_mine, adjacent_mines);
             }
         }
-        for sprite in self.tile_sprites.iter() {
+        for sprite in self.tile_sprites.borrow().iter() {
             sprite.game_state_changed(state);
         }
     }
@@ -124,7 +123,7 @@ impl GameStateListener for Grid {
 
 impl FlagStateListener for Grid {
     fn flag_state_changed(&self, exhausted: bool) {
-        for listener in self.flag_state_listeners.iter() {
+        for listener in self.flag_state_listeners.borrow().iter() {
             listener.upgrade().unwrap().flag_state_changed(exhausted);
         }
     }
@@ -138,7 +137,7 @@ struct Minefield {
 use rand::prelude::*;
 
 impl Minefield {
-    pub fn new(layout: Layout) -> Self {
+    fn new(layout: Layout) -> Self {
         let mut obj = Self {
             layout: layout,
             mines: BTreeSet::new(),
@@ -147,11 +146,11 @@ impl Minefield {
         obj
     }
 
-    pub fn mine_at(&self, index: i16) -> bool {
+    fn mine_at(&self, index: i16) -> bool {
         self.mines.contains(&index)
     }
 
-    pub fn adjacent_mines(&self, index: u16) -> u8 {
+    fn adjacent_mines(&self, index: u16) -> u8 {
         let mut sum = 0;
         let closure = |row, column| {
             let index = self.layout.options.index(row, column);
@@ -163,7 +162,7 @@ impl Minefield {
         sum
     }
 
-    pub fn reset(&mut self) {
+    fn reset(&mut self) {
         self.mines.clear();
         self.place_mines();
     }

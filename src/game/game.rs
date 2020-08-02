@@ -4,13 +4,13 @@ use crate::config::Layout;
 use crate::sprites::{Background, Button, FlagCounter, Grid, TimeCounter};
 use crate::sprites::{MouseEvent, MouseHandler, Renderer, RendererContext, Sprite};
 
-pub struct Game {
-    sprites: Vec<TraitWrapper<dyn Sprite>>,
-}
-
 use crate::sprites::Error;
 use crate::sprites::{FlagStateListener, GameStateListener, TileListener};
 use crate::sprites::{TraitWrapper, WeakTrait, WeakTraitWrapper};
+
+pub struct Game {
+    sprites: Vec<TraitWrapper<dyn Sprite>>,
+}
 
 impl Game {
     pub fn new(layout: Layout) -> Game {
@@ -19,15 +19,13 @@ impl Game {
         let timer = Rc::new(TimeCounter::new());
         let flag_counter = Rc::new(FlagCounter::new(layout));
         let button = Rc::new(Button::new(layout));
-        let mut grid = Rc::new(Grid::new(layout));
+        let grid = Rc::new(Grid::new(layout));
 
         let tile_listeners: Vec<WeakTraitWrapper<dyn TileListener>> = vec![
             Box::new(Rc::downgrade(&button) as WeakTrait<dyn TileListener>),
             Box::new(Rc::downgrade(&flag_counter) as WeakTrait<dyn TileListener>),
         ];
-        Rc::get_mut(&mut grid)
-            .unwrap()
-            .assign_listeners(&tile_listeners);
+        grid.assign_listeners(&tile_listeners);
 
         let game_state_listeners: Vec<WeakTraitWrapper<dyn GameStateListener>> = vec![
             Box::new(Rc::downgrade(&timer) as WeakTrait<dyn GameStateListener>),
