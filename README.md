@@ -7,5 +7,5 @@ Run locally, with SDL2:
 cargo run --no-default-features --features media_layer_sdl2
 
 To run in a browser via webassembly:
-nmp run serve
+npm run serve
 
