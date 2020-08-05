@@ -29,7 +29,7 @@ mod media_layer;
 mod sprites;
 
 /**
- * The library implements most of the game logic. There is very little that needs to be exposed to the from end.
+ * The library contains most of the game logic. There is very little that needs to be exposed to the from end.
  * A rendering context is passed around which is used in generating the UI updates.
  */
 pub use crate::config::Layout;
@@ -39,6 +39,7 @@ pub use crate::sprites::{Renderer, RendererContext};
 
 pub use crate::media_layer::{ResourceContainer, Texture, TextureManager};
 
+pub use crate::sprites::MessageExchange;
 pub use crate::sprites::Rect;
 
 #[cfg(feature = "media_layer_text")]
@@ -106,7 +107,7 @@ mod wasm {
     pub struct Minesweeper {
         canvas: Rc<web_sys::CanvasRenderingContext2d>,
         layout: Layout,
-        game: Game,
+        game: RefCell<Game>,
         texture_manager: TextureManager,
         digits: Vec<String>,
         tiles: Vec<String>,
@@ -127,7 +128,7 @@ mod wasm {
             Self {
                 canvas: canvas.clone(),
                 layout: layout,
-                game: Game::new(layout),
+                game: RefCell::new(Game::new(layout)),
                 texture_manager: ResourceContainer::new_texture_manager(),
                 digits: digits.iter().map(|s| s.to_string()).collect(),
                 tiles: tiles.iter().map(|s| s.to_string()).collect(),
@@ -143,11 +144,13 @@ mod wasm {
         }
 
         fn render(&self) {
-            let _ = self.game.render(self);
+            let _ = self.game.borrow().render(self);
         }
 
         pub fn handle_event(&self, event: &MouseEvent) {
-            self.game.handle_event(event);
+            self.game.borrow_mut().handle_event(event);
+            // since we're not running threads on the channels, perform a complete pull
+            while self.game.borrow_mut().pull() > 0 {}
         }
 
         fn render_from_cache(&self, resource: &ResourceContainer, left: i32, top: i32) {

@@ -1,14 +1,10 @@
 use snafu::Snafu;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 
 use crate::config::Layout;
 use crate::media_layer::Texture;
 
 pub use super::{Point, Rect, SystemTime};
-
-pub type TraitWrapper<T> = Box<Rc<T>>;
-pub type WeakTraitWrapper<T> = Box<Weak<T>>;
-pub type WeakTrait<T> = Weak<T>;
 
 pub fn render_digit(
     digit: u64,
@@ -21,7 +17,7 @@ pub fn render_digit(
 }
 
 // common enums
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum GameState {
     Init,
     Playing,
@@ -48,20 +44,6 @@ impl std::convert::From<String> for Error {
     }
 }
 
-pub trait GameStateListener {
-    fn game_state_changed(&self, state: GameState);
-}
-
-pub trait FlagStateListener {
-    fn flag_state_changed(&self, exhausted: bool);
-}
-
-pub trait TileListener {
-    fn reveal(&self, _is_mine: bool, _has_adjacent_mines: bool) {}
-    fn clear(&self) {}
-    fn flag(&self, _is_flagged: bool) {}
-}
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MouseButton {
     Left,
@@ -80,10 +62,11 @@ pub trait MouseHandler {
     fn hit_test(&self, _event: &MouseEvent) -> bool {
         false
     }
-    fn handle_event(&self, _event: &MouseEvent) {}
+    fn handle_event(&mut self, _event: &MouseEvent) {}
 }
 
-pub trait Sprite: Renderer + MouseHandler {}
+use crate::sprites::MessageExchange;
+pub trait Sprite: Renderer + MouseHandler + MessageExchange {}
 
 pub trait RendererContext {
     fn render_image(&self, texture: &Texture, src: Option<Rect>, dst: Rect) -> Result<(), String>;

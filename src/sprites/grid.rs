@@ -1,89 +1,140 @@
-use std::cell::RefCell;
 use std::collections::BTreeSet;
-use std::rc::{Rc, Weak};
+use std::sync::mpsc::{channel, Receiver, Sender};
 
 use crate::config::Layout;
+use crate::sprites::GameState;
+use crate::sprites::{ChannelMessage, ChannelWiring, Exchange, MessageExchange};
 use crate::sprites::{Error, Rect};
-use crate::sprites::{
-    FlagStateListener, GameState, GameStateListener, Sprite, TileListener, TraitWrapper,
-    WeakTraitWrapper,
-};
-use crate::sprites::{Tile, TileSprite};
-
-use crate::sprites::{MouseEvent, MouseHandler};
-use crate::sprites::{Renderer, RendererContext};
+use crate::sprites::{MouseEvent, MouseHandler, Renderer, RendererContext};
+use crate::sprites::{Sprite, Tile};
 
 pub struct Grid {
     layout: Layout,
     bounding_box: Rect,
-    tile_sprites: RefCell<Vec<TraitWrapper<dyn TileSprite>>>,
-    flag_state_listeners: RefCell<Vec<WeakTraitWrapper<dyn FlagStateListener>>>,
-    minefield: RefCell<Minefield>,
+    tiles: Vec<Tile>,
+    minefield: Minefield,
+    exchange: Exchange,
 }
 
 impl Grid {
-    pub fn new(layout: Layout) -> Self {
+    pub fn new(layout: Layout, wiring: &mut ChannelWiring) -> Self {
+        let mut exchange = Exchange::new_from_wiring::<Grid>(wiring);
         let bounding_box = layout.grid();
-        let minefield = RefCell::new(Minefield::new(layout));
-        minefield.borrow_mut().reset();
+        let mut minefield = Minefield::new(layout);
+        minefield.reset();
+        let (mut senders, tiles) = Grid::build_tiles(layout, &minefield, &exchange);
+        exchange.replace_senders(&mut senders);
 
         Self {
             layout: layout,
             bounding_box: bounding_box,
-            tile_sprites: RefCell::new(Vec::new()),
-            flag_state_listeners: RefCell::new(Vec::new()),
+            tiles: tiles,
             minefield: minefield,
+            exchange: exchange,
         }
     }
 
-    pub fn assign_listeners(&self, listeners: &Vec<WeakTraitWrapper<dyn TileListener>>) {
-        let tile_count = self.layout.options.tiles();
-        let mut tiles: Vec<TraitWrapper<Tile>> = Vec::new();
-        // first build the vector of tiles, we need this to get trait vectors
+    fn build_tiles(
+        layout: Layout,
+        minefield: &Minefield,
+        exchange: &Exchange,
+    ) -> (Vec<Sender<ChannelMessage>>, Vec<Tile>) {
+        struct TileChannel {
+            sender: Sender<ChannelMessage>,
+            receiver: Option<Receiver<ChannelMessage>>,
+        }
+
+        impl TileChannel {
+            pub fn get_receiver(&mut self) -> Option<Receiver<ChannelMessage>> {
+                use std::mem::swap;
+                let mut opt: Option<Receiver<ChannelMessage>> = None;
+                swap(&mut self.receiver, &mut opt);
+                opt
+            }
+
+            pub fn clone_sender(&self) -> Sender<ChannelMessage> {
+                self.sender.clone()
+            }
+        }
+
+        impl Default for TileChannel {
+            fn default() -> Self {
+                let (sender, receiver) = channel();
+                Self {
+                    sender,
+                    receiver: Some(receiver),
+                }
+            }
+        }
+
+        let tile_count = layout.options.tiles();
+        let mut tile_channels: Vec<TileChannel> = Vec::new();
+        for _ in 0..tile_count {
+            tile_channels.push(TileChannel::default());
+        }
+
+        // these are the flag_state_listeners
+        // the are also the tile sprites
+        let mut senders: Vec<Sender<ChannelMessage>> = Vec::new();
+        for channel in tile_channels.iter() {
+            senders.push(channel.clone_sender());
+        }
+
+        let mut tiles: Vec<Tile> = Vec::new();
         for index in 0..tile_count {
-            let bounding_box = self.layout.tile(self.bounding_box, index);
-            let tile = Box::new(Rc::new(Tile::new(self.layout, bounding_box)));
-
-            let adjacent_mines = self.minefield.borrow().adjacent_mines(index as u16);
-            let is_mine = self.minefield.borrow().mine_at(index);
+            let mut neighbors = exchange.clone_senders();
+            let closure = |row, column| {
+                let index = layout.options.index(row, column) as usize;
+                let channel = &tile_channels[index];
+                neighbors.push(channel.clone_sender());
+            };
+            layout.options.for_each_neighbor(index as u16, closure);
+            let bounding_box = layout.grid_tile(index);
+            let receiver = tile_channels[index as usize].get_receiver().unwrap();
+            let tile_exchange = Exchange::new(neighbors, vec![receiver]);
+            let mut tile = Tile::new(tile_exchange, bounding_box);
+            let adjacent_mines = minefield.adjacent_mines(index as u16);
+            let is_mine = minefield.mine_at(index);
             tile.reset(is_mine, adjacent_mines);
-
             tiles.push(tile);
         }
-        // from there, build the vector of sprite traits
-        let mut tile_sprites: Vec<TraitWrapper<dyn TileSprite>> = Vec::new();
-        for tile in tiles.iter() {
-            let tile_sprite = Rc::clone(&tile) as Rc<dyn TileSprite>;
-            tile_sprites.push(Box::new(tile_sprite));
-        }
-        self.tile_sprites.replace(tile_sprites);
+        (senders, tiles)
+    }
+}
 
-        // now the FlagStateListeners (which are also tiles)
-        let mut flag_state_listeners: Vec<WeakTraitWrapper<dyn FlagStateListener>> = Vec::new();
-        for tile in tiles.iter() {
-            let listener = Rc::downgrade(&tile) as Weak<dyn FlagStateListener>;
-            flag_state_listeners.push(Box::new(listener));
+impl MessageExchange for Grid {
+    fn pull(&mut self) -> u32 {
+        let mut count = self.exchange.pull();
+        for message in self.exchange.get_messages().iter() {
+            match message {
+                ChannelMessage::GameStateChanged(GameState::Init) => {
+                    self.minefield.reset();
+                    for index in 0..self.tiles.len() {
+                        let is_mine = self.minefield.mine_at(index as i16);
+                        let adjacent_mines = self.minefield.adjacent_mines(index as u16);
+                        self.tiles[index].reset(is_mine, adjacent_mines);
+                    }
+                    self.exchange.push(message.clone());
+                }
+                ChannelMessage::GameStateChanged(_state) => {
+                    self.exchange.push(message.clone());
+                }
+                ChannelMessage::FlagStateChanged(_exhausted) => {
+                    self.exchange.push(message.clone());
+                }
+                _ => println!("Grid: unhandled message {:#?}", message),
+            }
         }
-        self.flag_state_listeners.replace(flag_state_listeners);
-
-        // finally, build the adjacency network
-        for index in 0..tiles.len() {
-            let mut all = listeners.clone();
-            let closure = |row, column| {
-                let index = self.layout.options.index(row, column) as usize;
-                let tile = &tiles[index];
-                let listener = Rc::downgrade(&tile) as Weak<dyn TileListener>;
-                all.push(Box::new(listener));
-            };
-            self.layout.options.for_each_neighbor(index as u16, closure);
-            tiles[index as usize].assign_listeners(all);
+        for tiles in self.tiles.iter_mut() {
+            count += tiles.pull();
         }
+        count
     }
 }
 
 impl Renderer for Grid {
     fn render(&self, context: &dyn RendererContext) -> Result<(), Error> {
-        for sprite in self.tile_sprites.borrow().iter() {
+        for sprite in self.tiles.iter() {
             sprite.render(context)?;
         }
         Ok(())
@@ -94,40 +145,15 @@ impl MouseHandler for Grid {
     fn hit_test(&self, event: &MouseEvent) -> bool {
         self.bounding_box.contains_point((event.x, event.y))
     }
-    fn handle_event(&self, event: &MouseEvent) {
+    fn handle_event(&mut self, event: &MouseEvent) {
         let column = (event.x - self.bounding_box.left()) / Layout::tile_side() as i32;
         let row = (event.y - self.bounding_box.top()) / Layout::tile_side() as i32;
         let index = self.layout.options.index(row as i16, column as i16) as usize;
-        self.tile_sprites.borrow()[index].handle_event(event);
+        self.tiles[index].handle_event(event);
     }
 }
 
 impl Sprite for Grid {}
-
-impl GameStateListener for Grid {
-    fn game_state_changed(&self, state: GameState) {
-        if state == GameState::Init {
-            self.minefield.borrow_mut().reset();
-            for index in 0..self.tile_sprites.borrow().len() {
-                let minefield = self.minefield.borrow();
-                let is_mine = minefield.mine_at(index as i16);
-                let adjacent_mines = minefield.adjacent_mines(index as u16);
-                self.tile_sprites.borrow()[index].reset(is_mine, adjacent_mines);
-            }
-        }
-        for sprite in self.tile_sprites.borrow().iter() {
-            sprite.game_state_changed(state);
-        }
-    }
-}
-
-impl FlagStateListener for Grid {
-    fn flag_state_changed(&self, exhausted: bool) {
-        for listener in self.flag_state_listeners.borrow().iter() {
-            listener.upgrade().unwrap().flag_state_changed(exhausted);
-        }
-    }
-}
 
 struct Minefield {
     layout: Layout,

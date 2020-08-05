@@ -1,3 +1,4 @@
+use crate::sprites::MessageExchange;
 use crate::sprites::Rect;
 use crate::sprites::{Error, MouseHandler, Renderer, RendererContext, Sprite};
 
@@ -18,5 +19,5 @@ impl Renderer for Background {
 }
 
 impl MouseHandler for Background {}
-
+impl MessageExchange for Background {}
 impl Sprite for Background {}

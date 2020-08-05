@@ -112,6 +112,14 @@ impl Layout {
         Rect::new(left, top, TILE_SIDE, TILE_SIDE)
     }
 
+    pub fn grid_tile(&self, index: i16) -> Rect {
+        let bounding_box = self.grid();
+        let (row, column) = self.options.row_column(index as u16);
+        let left = bounding_box.left() + (column * TILE_SIDE as i16) as i32;
+        let top = bounding_box.top() + (row * TILE_SIDE as i16) as i32;
+        Rect::new(left, top, TILE_SIDE, TILE_SIDE)
+    }
+
     pub fn timer_digit_panel(&self) -> Rect {
         let left = self.width() - self.digit_panel_offset() - DIGIT_PANEL_WIDTH;
         self.digit_panel(left, TIMER_TOP)

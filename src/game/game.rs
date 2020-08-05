@@ -1,45 +1,35 @@
-use std::rc::Rc;
-
 use crate::config::Layout;
-use crate::sprites::{Background, Button, FlagCounter, Grid, TimeCounter};
-use crate::sprites::{MouseEvent, MouseHandler, Renderer, RendererContext, Sprite};
-
 use crate::sprites::Error;
-use crate::sprites::{FlagStateListener, GameStateListener, TileListener};
-use crate::sprites::{TraitWrapper, WeakTrait, WeakTraitWrapper};
+use crate::sprites::{Background, Button, FlagCounter, Grid, Sprite, TimeCounter};
+use crate::sprites::{ChannelWiring, MessageExchange};
+use crate::sprites::{MouseEvent, MouseHandler, Renderer, RendererContext};
 
 pub struct Game {
-    sprites: Vec<TraitWrapper<dyn Sprite>>,
+    sprites: Vec<Box<dyn Sprite>>,
 }
 
 impl Game {
     pub fn new(layout: Layout) -> Game {
-        // create the underlying objects
-        let bg = Rc::new(Background {});
-        let timer = Rc::new(TimeCounter::new());
-        let flag_counter = Rc::new(FlagCounter::new(layout));
-        let button = Rc::new(Button::new(layout));
-        let grid = Rc::new(Grid::new(layout));
+        // get all the channel wiring setup
+        let mut channels = ChannelWiring::default();
+        channels.wire::<Grid, Button>();
+        channels.wire::<Grid, FlagCounter>();
 
-        let tile_listeners: Vec<WeakTraitWrapper<dyn TileListener>> = vec![
-            Box::new(Rc::downgrade(&button) as WeakTrait<dyn TileListener>),
-            Box::new(Rc::downgrade(&flag_counter) as WeakTrait<dyn TileListener>),
-        ];
-        grid.assign_listeners(&tile_listeners);
+        channels.wire::<Button, TimeCounter>();
+        channels.wire::<Button, FlagCounter>();
+        channels.wire::<Button, Grid>();
 
-        let game_state_listeners: Vec<WeakTraitWrapper<dyn GameStateListener>> = vec![
-            Box::new(Rc::downgrade(&timer) as WeakTrait<dyn GameStateListener>),
-            Box::new(Rc::downgrade(&flag_counter) as WeakTrait<dyn GameStateListener>),
-            Box::new(Rc::downgrade(&grid) as WeakTrait<dyn GameStateListener>),
-        ];
-        button.assign_listeners(game_state_listeners);
+        channels.wire::<FlagCounter, Grid>();
 
-        let flag_state_listeners: Vec<WeakTraitWrapper<dyn FlagStateListener>> = vec![Box::new(
-            Rc::downgrade(&grid) as WeakTrait<dyn FlagStateListener>,
-        )];
-        flag_counter.assign_listeners(flag_state_listeners);
+        // create the underlying objects, with their wiring
+        let bg = Background {};
+        let timer = TimeCounter::new(&mut channels);
+        let flag_counter = FlagCounter::new(layout, &mut channels);
+        let button = Button::new(layout, &mut channels);
+        let grid = Grid::new(layout, &mut channels);
 
-        let sprites: Vec<TraitWrapper<dyn Sprite>> = vec![
+        // own them as a Sprite trait
+        let sprites: Vec<Box<dyn Sprite>> = vec![
             Box::new(bg),
             Box::new(timer),
             Box::new(flag_counter),
@@ -52,11 +42,13 @@ impl Game {
     }
 }
 
-impl Default for Game {
-    fn default() -> Self {
-        Self {
-            sprites: Vec::new(),
+impl MessageExchange for Game {
+    fn pull(&mut self) -> u32 {
+        let mut count: u32 = 0;
+        for sprite in self.sprites.iter_mut() {
+            count += sprite.pull();
         }
+        count
     }
 }
 
@@ -74,8 +66,8 @@ impl MouseHandler for Game {
         false
     }
 
-    fn handle_event(&self, event: &MouseEvent) {
-        for sprite in self.sprites.iter() {
+    fn handle_event(&mut self, event: &MouseEvent) {
+        for sprite in self.sprites.iter_mut() {
             if sprite.hit_test(event) {
                 sprite.handle_event(event);
             }

@@ -4,9 +4,13 @@ pub use sprites::StartTimeInvalid;
 
 pub use sprites::Error;
 
-pub use sprites::{FlagStateListener, GameState, GameStateListener, TileListener};
+pub mod channel_wiring;
+
+pub mod message_exchange;
+pub use message_exchange::{ChannelMessage, ChannelWiring, Exchange, MessageExchange};
+
+pub use sprites::GameState;
 pub use sprites::{MouseButton, MouseEvent, MouseHandler, Renderer, RendererContext, Sprite};
-pub use sprites::{TraitWrapper, WeakTrait, WeakTraitWrapper};
 
 pub mod background;
 pub use background::Background;
@@ -24,7 +28,7 @@ pub mod timecounter;
 pub use timecounter::TimeCounter;
 
 pub mod tile;
-pub use tile::{Tile, TileSprite};
+pub use tile::Tile;
 
 #[cfg(feature = "media_layer_wasm")]
 mod util;

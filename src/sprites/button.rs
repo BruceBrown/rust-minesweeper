@@ -1,48 +1,40 @@
-use std::cell::{Cell, RefCell};
-
 use crate::config::Layout;
-
-use crate::sprites::WeakTraitWrapper;
+use crate::sprites::GameState;
 use crate::sprites::{Error, Rect};
-use crate::sprites::{GameState, GameStateListener, TileListener};
 use crate::sprites::{MouseButton, MouseEvent, MouseHandler, Renderer, RendererContext, Sprite};
 
+use crate::sprites::{ChannelMessage, ChannelWiring, Exchange, MessageExchange};
+
 pub struct Button {
-    game_state: Cell<GameState>,
-    game_state_listeners: RefCell<Vec<WeakTraitWrapper<dyn GameStateListener>>>,
-    revealed: Cell<i16>,
+    game_state: GameState,
+    revealed: i16,
     blanks: i16,
     bounding_box: Rect,
+    exchange: Exchange,
 }
 
 impl Button {
-    pub fn new(layout: Layout) -> Self {
+    pub fn new(layout: Layout, wiring: &mut ChannelWiring) -> Self {
         Self {
-            game_state: Cell::new(GameState::Init),
-            game_state_listeners: RefCell::new(Vec::new()),
-            revealed: Cell::new(0),
+            game_state: GameState::Init,
+            revealed: 0,
             blanks: layout.options.blanks(),
             bounding_box: layout.face(),
+            exchange: Exchange::new_from_wiring::<Button>(wiring),
         }
     }
 
-    pub fn assign_listeners(&self, listeners: Vec<WeakTraitWrapper<dyn GameStateListener>>) {
-        self.game_state_listeners.replace(listeners);
-    }
-
-    fn notify_listeners(&self) {
-        for listener in self.game_state_listeners.borrow().iter() {
-            listener
-                .upgrade()
-                .unwrap()
-                .game_state_changed(self.game_state.get());
-        }
+    fn update_game_state(&mut self, new_state: GameState) {
+        self.game_state = new_state;
+        // let everyone know it changed
+        let message = ChannelMessage::GameStateChanged(new_state);
+        self.exchange.push(message);
     }
 }
 
 impl Renderer for Button {
     fn render(&self, context: &dyn RendererContext) -> Result<(), Error> {
-        let name = match self.game_state.get() {
+        let name = match self.game_state {
             GameState::Init => "face_playing",
             GameState::Playing => "face_playing",
             GameState::Win => "face_win",
@@ -53,37 +45,41 @@ impl Renderer for Button {
         Ok(())
     }
 }
+
 impl MouseHandler for Button {
     fn hit_test(&self, event: &MouseEvent) -> bool {
         self.bounding_box.contains_point((event.x, event.y))
     }
-    fn handle_event(&self, event: &MouseEvent) {
+    fn handle_event(&mut self, event: &MouseEvent) {
         if event.mouse_btn == MouseButton::Left {
-            self.game_state.set(GameState::Init);
-            self.revealed.set(0);
-            self.notify_listeners();
+            self.revealed = 0;
+            self.update_game_state(GameState::Init);
         }
+    }
+}
+
+impl MessageExchange for Button {
+    fn pull(&mut self) -> u32 {
+        let count = self.exchange.pull();
+        for message in self.exchange.get_messages().iter() {
+            match message {
+                ChannelMessage::Revealed(true, _) => {
+                    self.update_game_state(GameState::Lose);
+                }
+                ChannelMessage::Revealed(false, _) => {
+                    if self.game_state == GameState::Init {
+                        self.update_game_state(GameState::Playing);
+                    }
+                    self.revealed += 1;
+                    if self.revealed == self.blanks {
+                        self.update_game_state(GameState::Win);
+                    }
+                }
+                _ => (),
+            }
+        }
+        count
     }
 }
 
 impl Sprite for Button {}
-
-impl TileListener for Button {
-    fn reveal(&self, is_mine: bool, _has_adjacent_mines: bool) {
-        if is_mine {
-            self.game_state.set(GameState::Lose);
-            self.notify_listeners();
-        } else {
-            if self.game_state.get() == GameState::Init {
-                self.game_state.set(GameState::Playing);
-                self.notify_listeners();
-            }
-            let revealed = self.revealed.get() + 1;
-            self.revealed.set(revealed);
-            if revealed == self.blanks {
-                self.game_state.set(GameState::Win);
-                self.notify_listeners();
-            }
-        }
-    }
-}

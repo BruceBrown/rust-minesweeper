@@ -38,6 +38,7 @@ mod sdl2_minesweeper {
     use sdl2::keyboard::Keycode;
 
     extern crate minesweeperlib;
+    use crate::minesweeperlib::MessageExchange;
     use crate::minesweeperlib::{
         Error, Game, Layout, Rect, Renderer, RendererContext, ResourceContainer, Texture,
         TextureManager,
@@ -82,8 +83,10 @@ mod sdl2_minesweeper {
             self.canvas.borrow_mut().present();
         }
 
-        fn handle_event(&self, event: &MouseEvent) {
+        fn handle_event(&mut self, event: &MouseEvent) {
             self.game.handle_event(event);
+            // since we're not running threads on the channels, perform a complete pull
+            while self.game.pull() > 0 {}
         }
     }
 
@@ -158,7 +161,7 @@ mod sdl2_minesweeper {
             .build()
             .map_err(|e| e.to_string())?;
 
-        let minesweeper = Minesweeper::new(canvas);
+        let mut minesweeper = Minesweeper::new(canvas);
         minesweeper.render();
         let mut event_pump: sdl2::EventPump = sdl_context.event_pump()?;
         'running: loop {

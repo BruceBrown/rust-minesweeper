@@ -1,60 +1,62 @@
-use snafu::ResultExt;
-use std::cell::Cell;
-
 use crate::sprites::render_digit;
 use crate::sprites::Error;
-use crate::sprites::StartTimeInvalid;
-use crate::sprites::{GameState, GameStateListener};
+use crate::sprites::GameState;
 use crate::sprites::{MouseHandler, Renderer, RendererContext, Sprite};
 
 use crate::sprites::SystemTime;
 
+use crate::sprites::{ChannelMessage, ChannelWiring, Exchange, MessageExchange};
+
 pub struct TimeCounter {
-    elapsed: Cell<u64>,
-    running: Cell<bool>,
-    start: Cell<SystemTime>,
+    elapsed: u64,
+    running: bool,
+    start: SystemTime,
+    exchange: Exchange,
 }
 
 impl TimeCounter {
-    pub fn new() -> Self {
+    pub fn new(wiring: &mut ChannelWiring) -> Self {
         Self {
-            elapsed: Cell::new(0),
-            running: Cell::new(false),
-            start: Cell::new(SystemTime::now()),
+            elapsed: 0,
+            running: false,
+            start: SystemTime::now(),
+            exchange: Exchange::new_from_wiring::<TimeCounter>(wiring),
         }
     }
 }
 
-impl GameStateListener for TimeCounter {
-    fn game_state_changed(&self, state: GameState) {
-        match state {
-            GameState::Init => {
-                self.running.set(false);
-                self.elapsed.set(0);
-            }
-            GameState::Playing => {
-                self.running.set(true);
-                self.start.set(SystemTime::now());
-            }
-            GameState::Win => {
-                self.running.set(false);
-                self.elapsed
-                    .set(self.start.get().elapsed().unwrap().as_secs());
-            }
-            GameState::Lose => {
-                self.running.set(false);
-                self.elapsed
-                    .set(self.start.get().elapsed().unwrap().as_secs());
+impl MessageExchange for TimeCounter {
+    fn pull(&mut self) -> u32 {
+        let count = self.exchange.pull();
+        for message in self.exchange.get_messages().iter() {
+            match message {
+                ChannelMessage::GameStateChanged(GameState::Init) => {
+                    self.running = false;
+                    self.elapsed = 0;
+                }
+                ChannelMessage::GameStateChanged(GameState::Playing) => {
+                    self.running = true;
+                    self.start = SystemTime::now();
+                }
+                ChannelMessage::GameStateChanged(GameState::Win) => {
+                    self.running = false;
+                    self.elapsed = self.start.elapsed().unwrap().as_secs();
+                }
+                ChannelMessage::GameStateChanged(GameState::Lose) => {
+                    self.running = false;
+                    self.elapsed = self.start.elapsed().unwrap().as_secs();
+                }
+                _ => (),
             }
         }
+        count
     }
 }
 
 impl Renderer for TimeCounter {
     fn render(&self, context_: &dyn RendererContext) -> Result<(), Error> {
-        let elapsed = if self.running.get() {
+        let elapsed = if self.running {
             self.start
-                .get()
                 .elapsed()
                 /*
                 .context(StartTimeInvalid {
@@ -64,7 +66,7 @@ impl Renderer for TimeCounter {
                 .unwrap()
                 .as_secs()
         } else {
-            self.elapsed.get()
+            self.elapsed
         };
         let image = context_.load("digit_panel")?;
         let bounding_box = context_.layout().timer_digit_panel();
