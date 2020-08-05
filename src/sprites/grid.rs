@@ -116,13 +116,9 @@ impl MessageExchange for Grid {
                     }
                     self.exchange.push(message.clone());
                 }
-                ChannelMessage::GameStateChanged(_state) => {
-                    self.exchange.push(message.clone());
-                }
-                ChannelMessage::FlagStateChanged(_exhausted) => {
-                    self.exchange.push(message.clone());
-                }
-                _ => println!("Grid: unhandled message {:#?}", message),
+                ChannelMessage::GameStateChanged(_state) => self.exchange.push(message.clone()),
+                ChannelMessage::FlagStateChanged(_exhausted) => self.exchange.push(message.clone()),
+                _ => (),
             }
         }
         for tiles in self.tiles.iter_mut() {

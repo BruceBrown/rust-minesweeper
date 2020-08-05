@@ -27,12 +27,12 @@ impl MessageExchange for FlagCounter {
         for message in self.exchange.get_messages().iter() {
             match message {
                 ChannelMessage::GameStateChanged(GameState::Init) => {
-                    self.flags = self.layout.options.mines();
+                    self.flags = self.layout.options.mines()
                 }
                 ChannelMessage::Flagged(true) => {
                     self.flags -= 1;
                     if self.flags == 0 {
-                        self.exchange.push(ChannelMessage::FlagStateChanged(false));
+                        self.exchange.push(ChannelMessage::FlagStateChanged(true));
                     }
                 }
                 ChannelMessage::Flagged(false) => {
@@ -41,7 +41,7 @@ impl MessageExchange for FlagCounter {
                         self.exchange.push(ChannelMessage::FlagStateChanged(false));
                     }
                 }
-                _ => println!("Tile: unhandled message {:#?}", message),
+                _ => (),
             }
         }
         count

@@ -41,14 +41,12 @@ impl Tile {
         }
     }
 
-    fn try_reveal(&mut self) {
-        if self.is_game_over || self.is_flagged || self.is_revealed {
-        } else {
+    fn reveal(&mut self) {
+        if !self.is_game_over && !self.is_flagged && !self.is_revealed {
             self.is_revealed = true;
             let has_adjacent_mines = self.adjacent_mines > 0;
-            let is_mine = self.is_mine;
             self.exchange
-                .push(ChannelMessage::Revealed(is_mine, has_adjacent_mines));
+                .push(ChannelMessage::Revealed(self.is_mine, has_adjacent_mines));
         }
     }
 
@@ -114,7 +112,7 @@ impl MouseHandler for Tile {
                 if self.is_revealed {
                     self.try_clear();
                 } else {
-                    self.try_reveal();
+                    self.reveal();
                 }
             }
             MouseButton::Right => {
@@ -124,6 +122,7 @@ impl MouseHandler for Tile {
         }
     }
 }
+
 impl MessageExchange for Tile {
     fn pull(&mut self) -> u32 {
         let count = self.exchange.pull();
@@ -131,8 +130,8 @@ impl MessageExchange for Tile {
             match message {
                 ChannelMessage::FlagStateChanged(exhausted) => self.flag_remaining = !exhausted,
                 ChannelMessage::GameStateChanged(state) => self.handle_game_state_changed(&state),
-                ChannelMessage::Revealed(false, false) => self.try_reveal(),
-                ChannelMessage::Clear => self.try_reveal(),
+                ChannelMessage::Revealed(false, false) => self.reveal(),
+                ChannelMessage::Clear => self.reveal(),
                 ChannelMessage::Flagged(true) => self.adjacent_flags += 1,
                 ChannelMessage::Flagged(false) => self.adjacent_flags -= 1,
                 _ => (),

@@ -63,9 +63,7 @@ impl MessageExchange for Button {
         let count = self.exchange.pull();
         for message in self.exchange.get_messages().iter() {
             match message {
-                ChannelMessage::Revealed(true, _) => {
-                    self.update_game_state(GameState::Lose);
-                }
+                ChannelMessage::Revealed(true, _) => self.update_game_state(GameState::Lose),
                 ChannelMessage::Revealed(false, _) => {
                     if self.game_state == GameState::Init {
                         self.update_game_state(GameState::Playing);

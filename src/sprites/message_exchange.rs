@@ -10,15 +10,15 @@ pub trait MessageExchange {
     fn push(&mut self) {}
 }
 
+/// Channel messages is the data that flows through chanels.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ChannelMessage {
-    Dummy,
-    GameStateChanged(GameState),
-    FlagStateChanged(bool), //FlagStateListener flag_state_changed(is_exhausted)
-    Flagged(bool),          //TileListener flag(flagged)
-    Revealed(bool, bool),   //TileListener reveal(is_mine, has_adjance_mines)
-    Clear,
-    Flag(bool), // is_flagged
+    Dummy,                       //
+    GameStateChanged(GameState), //< Game state change
+    FlagStateChanged(bool),      //< Flag state change, either exhausted or not
+    Flagged(bool),               //< Tile has been flagged (true) or unflagged(false)
+    Revealed(bool, bool),        //< Tile has been revealed and is_mine, has_adjacent_mines
+    Clear, //< Trying to clear an area of mines, neigbors use this to determine if they can reveal
 }
 impl Default for ChannelMessage {
     fn default() -> Self {

@@ -21,21 +21,14 @@ impl Game {
 
         channels.wire::<FlagCounter, Grid>();
 
-        // create the underlying objects, with their wiring
-        let bg = Background {};
-        let timer = TimeCounter::new(&mut channels);
-        let flag_counter = FlagCounter::new(layout, &mut channels);
-        let button = Button::new(layout, &mut channels);
-        let grid = Grid::new(layout, &mut channels);
+        let mut sprites: Vec<Box<dyn Sprite>> = Vec::new();
 
-        // own them as a Sprite trait
-        let sprites: Vec<Box<dyn Sprite>> = vec![
-            Box::new(bg),
-            Box::new(timer),
-            Box::new(flag_counter),
-            Box::new(button),
-            Box::new(grid),
-        ];
+        // create the underlying objects, and own via trait
+        sprites.push(Box::new(Background {}));
+        sprites.push(Box::new(TimeCounter::new(&mut channels)));
+        sprites.push(Box::new(FlagCounter::new(layout, &mut channels)));
+        sprites.push(Box::new(Button::new(layout, &mut channels)));
+        sprites.push(Box::new(Grid::new(layout, &mut channels)));
 
         // finally create the game object
         Game { sprites: sprites }
