@@ -34,13 +34,13 @@ mod sprites;
  */
 pub use crate::config::Layout;
 pub use crate::game::Game;
-pub use crate::sprites::{Error, MouseButton, MouseEvent, MouseHandler};
+pub use crate::sprites::{Error, MouseButton, MouseEventData};
 pub use crate::sprites::{Renderer, RendererContext};
 
 pub use crate::media_layer::{ResourceContainer, Texture, TextureManager};
 
-pub use crate::sprites::MessageExchange;
 pub use crate::sprites::Rect;
+pub use crate::sprites::{ChannelMessage, MessageExchange};
 
 #[cfg(feature = "media_layer_text")]
 mod text {
@@ -104,62 +104,23 @@ mod wasm {
         }
     }
 
-    pub struct Minesweeper {
+    struct RenderingContext {
         canvas: Rc<web_sys::CanvasRenderingContext2d>,
         layout: Layout,
-        game: RefCell<Game>,
-        texture_manager: TextureManager,
+         texture_manager: TextureManager,
         digits: Vec<String>,
         tiles: Vec<String>,
     }
 
-    impl Minesweeper {
-        pub fn new(canvas: &Rc<web_sys::CanvasRenderingContext2d>) -> Self {
-            let layout = config::BEGINNER_LAYOUT;
-
-            let digits = [
-                "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
-            ];
-            let tiles = [
-                "none", "one", "two", "three", "four", "five", "six", "seven", "eight",
-            ];
-            log!("building Minesweeper");
-
-            Self {
-                canvas: canvas.clone(),
-                layout: layout,
-                game: RefCell::new(Game::new(layout)),
-                texture_manager: ResourceContainer::new_texture_manager(),
-                digits: digits.iter().map(|s| s.to_string()).collect(),
-                tiles: tiles.iter().map(|s| s.to_string()).collect(),
-            }
-        }
-
-        pub fn width(&self) -> u32 {
-            self.layout.width()
-        }
-
-        pub fn height(&self) -> u32 {
-            self.layout.height()
-        }
-
-        fn render(&self) {
-            let _ = self.game.borrow().render(self);
-        }
-
-        pub fn handle_event(&self, event: &MouseEvent) {
-            self.game.borrow_mut().handle_event(event);
-            // since we're not running threads on the channels, perform a complete pull
-            while self.game.borrow_mut().pull() > 0 {}
-        }
+    impl RenderingContext {
 
         fn render_from_cache(&self, resource: &ResourceContainer, left: i32, top: i32) {
             self.canvas
                 .put_image_data(resource.get_image_data(), left as f64, top as f64);
         }
-    }
 
-    impl RendererContext for Minesweeper {
+    }
+    impl RendererContext for RenderingContext {
         fn render_image(
             &self,
             texture: &Texture,
@@ -202,7 +163,69 @@ mod wasm {
             let image_name = format!("tile_{}", name);
             self.load(&image_name)
         }
+
+        fn end_rendering(&self) {}
     }
+
+    pub struct Minesweeper {
+        layout: Layout,
+        game: RefCell<Game>,
+        game_sender: std::sync::mpsc::Sender<ChannelMessage>,
+        rendering_context: Rc<Box<dyn RendererContext>>,
+    }
+
+    impl Minesweeper {
+        pub fn new(canvas: &Rc<web_sys::CanvasRenderingContext2d>) -> Self {
+            let layout = config::BEGINNER_LAYOUT;
+
+            let digits = [
+                "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+            ];
+            let tiles = [
+                "none", "one", "two", "three", "four", "five", "six", "seven", "eight",
+            ];
+            
+
+            let rendering_context = RenderingContext {
+                canvas: canvas.clone(),
+                layout: layout,
+                texture_manager: ResourceContainer::new_texture_manager(),
+                digits: digits.iter().map(|s| s.to_string()).collect(),
+                tiles: tiles.iter().map(|s| s.to_string()).collect(),
+            };
+            let context = Rc::new(Box::new(rendering_context) as Box<dyn RendererContext>);
+            let game = Game::new(layout);
+            let sender = game.get_sender();
+            Self {
+                layout: layout,
+                game: RefCell::new(game),
+                game_sender: sender,
+                rendering_context: context,
+            }
+        }
+
+        pub fn width(&self) -> u32 {
+            self.layout.width()
+        }
+
+        pub fn height(&self) -> u32 {
+            self.layout.height()
+        }
+
+        fn render(&self) {
+            let message = ChannelMessage::Render(Rc::clone(&self.rendering_context));
+            self.game_sender.send(message).unwrap();
+            while self.game.borrow_mut().pull() > 0 {}
+            self.rendering_context.end_rendering();
+        }
+
+        pub fn handle_event(&self, event: MouseEventData) {
+            let message = ChannelMessage::MouseEvent(event);
+            self.game_sender.send(message).unwrap();
+            while self.game.borrow_mut().pull() > 0 {}
+        }
+    }
+
 
     fn window() -> web_sys::Window {
         web_sys::window().expect("no global `window` exists")
@@ -245,6 +268,7 @@ mod wasm {
         canvas.set_width(minesweeper.width());
         canvas.set_height(minesweeper.height());
         let minesweeper = Rc::new(minesweeper);
+        minesweeper.render();
         // setup the mouse down hook
         {
             let minesweeper = minesweeper.clone();
@@ -255,13 +279,14 @@ mod wasm {
                     2 => MouseButton::Right,
                     _ => MouseButton::Middle,
                 };
-                let mouse_event = MouseEvent {
+                let mouse_event = MouseEventData {
                     x: event.offset_x(),
                     y: event.offset_y(),
                     mouse_btn: button,
                 };
 
-                minesweeper.handle_event(&mouse_event);
+                minesweeper.handle_event(mouse_event);
+                minesweeper.render();
             }) as Box<dyn FnMut(_)>);
             canvas
                 .add_event_listener_with_callback("mousedown", closure.as_ref().unchecked_ref())?;

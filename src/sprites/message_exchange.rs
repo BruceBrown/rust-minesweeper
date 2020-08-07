@@ -2,6 +2,7 @@ use std::mem::swap;
 use std::sync::mpsc::{Receiver, Sender};
 
 use crate::sprites::GameState;
+use crate::sprites::{RendererContext, MouseEventData};
 
 pub trait MessageExchange {
     fn pull(&mut self) -> u32 {
@@ -10,30 +11,33 @@ pub trait MessageExchange {
     fn push(&mut self) {}
 }
 
+use std::rc::Rc;
 /// Channel messages is the data that flows through chanels.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone)]
 pub enum ChannelMessage {
-    Dummy,                       //
+    TestMessage,                 //
     GameStateChanged(GameState), //< Game state change
     FlagStateChanged(bool),      //< Flag state change, either exhausted or not
     Flagged(bool),               //< Tile has been flagged (true) or unflagged(false)
     Revealed(bool, bool),        //< Tile has been revealed and is_mine, has_adjacent_mines
     Clear, //< Trying to clear an area of mines, neigbors use this to determine if they can reveal
+    Render(Rc<Box<dyn RendererContext + 'static>>),
+    MouseEvent(MouseEventData),
+
 }
 impl Default for ChannelMessage {
     fn default() -> Self {
-        ChannelMessage::Dummy
+        ChannelMessage::TestMessage
     }
 }
 
 use crate::sprites::channel_wiring;
 pub type ChannelWiring = channel_wiring::TheChannelWiring<ChannelMessage>;
 
-#[derive(Debug, Default)]
 pub struct Exchange {
     messages: Vec<ChannelMessage>,
     senders: Vec<Sender<ChannelMessage>>,
-    receivers: Vec<Receiver<ChannelMessage>>,
+    receiver: Option<Receiver<ChannelMessage>>,
 }
 
 impl Exchange {
@@ -41,36 +45,35 @@ impl Exchange {
     where
         T: 'static,
     {
-        let (senders, receivers) = wiring.channels::<T>();
+        let (senders, receiver) = wiring.channels::<T>();
+        if receiver.is_none() {
+            println!("No receiver found")
+        }
         Self {
             messages: Vec::new(),
             senders: senders.unwrap_or_default(),
-            receivers: receivers.unwrap_or_default(),
+            receiver: receiver,
         }
     }
     pub fn new(
         senders: Vec<Sender<ChannelMessage>>,
-        receivers: Vec<Receiver<ChannelMessage>>,
+        receivers: Option<Receiver<ChannelMessage>>,
     ) -> Self {
         Self {
             messages: Vec::new(),
             senders: senders,
-            receivers: receivers,
+            receiver: receivers,
         }
     }
-    /*
-    fn new(senders: Option<Vec<Sender<ChannelMessage>>>, receivers: Option<Vec<Receiver<ChannelMessage>>>) -> Self {
-        Self {
-            messages: Vec::new(),
-            senders: senders.unwrap(),
-            receivers: receivers.unwrap(),
-        }
-    }
-    */
-    pub fn push(&self, message: ChannelMessage) {
+   
+    pub fn push_message(&self, message: ChannelMessage) {
         for tx in self.senders.iter() {
-            tx.send(message);
+            tx.send(message.clone()).unwrap();
         }
+    }
+
+    pub fn push_message_to_index(&self, message: ChannelMessage, index: usize) {
+        self.senders[index].send(message).unwrap();
     }
 
     pub fn clone_senders(&self) -> Vec<Sender<ChannelMessage>> {
@@ -91,14 +94,22 @@ impl Exchange {
 impl MessageExchange for Exchange {
     fn pull(&mut self) -> u32 {
         let mut count: u32 = 0;
-        for rx in self.receivers.iter() {
-            if let Ok(message) = rx.try_recv() {
-                count += 1;
+        if let Some(receiver) = &self.receiver {
+            if let Ok(message) = receiver.try_recv() {
                 self.messages.push(message);
+                count = 1;
             }
         }
+        /*
+            for message in receiver.try_iter() {
+                self.messages.push(message);
+                count += 1
+            }
+        }
+        */
         count
     }
+
     fn push(&mut self) {
         for message in self.messages.iter() {
             for tx in self.senders.iter() {

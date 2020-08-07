@@ -1,7 +1,7 @@
 use crate::config::Layout;
 use crate::sprites::GameState;
 use crate::sprites::{Error, Rect};
-use crate::sprites::{MouseButton, MouseEvent, MouseHandler, Renderer, RendererContext, Sprite};
+use crate::sprites::{MouseButton, MouseEventData, Renderer, RendererContext, Sprite};
 
 use crate::sprites::{ChannelMessage, ChannelWiring, Exchange, MessageExchange};
 
@@ -28,12 +28,10 @@ impl Button {
         self.game_state = new_state;
         // let everyone know it changed
         let message = ChannelMessage::GameStateChanged(new_state);
-        self.exchange.push(message);
+        self.exchange.push_message(message);
     }
-}
 
-impl Renderer for Button {
-    fn render(&self, context: &dyn RendererContext) -> Result<(), Error> {
+    fn render(&self, context: &Box<dyn RendererContext>) -> Result<(), Error> {
         let name = match self.game_state {
             GameState::Init => "face_playing",
             GameState::Playing => "face_playing",
@@ -43,18 +41,6 @@ impl Renderer for Button {
         let image = context.load(name)?;
         context.render_image(&image, None, self.bounding_box)?;
         Ok(())
-    }
-}
-
-impl MouseHandler for Button {
-    fn hit_test(&self, event: &MouseEvent) -> bool {
-        self.bounding_box.contains_point((event.x, event.y))
-    }
-    fn handle_event(&mut self, event: &MouseEvent) {
-        if event.mouse_btn == MouseButton::Left {
-            self.revealed = 0;
-            self.update_game_state(GameState::Init);
-        }
     }
 }
 
@@ -71,6 +57,15 @@ impl MessageExchange for Button {
                     self.revealed += 1;
                     if self.revealed == self.blanks {
                         self.update_game_state(GameState::Win);
+                    }
+                }
+                ChannelMessage::Render(context) => self.render(&context).unwrap(),
+                ChannelMessage::MouseEvent(event) => {
+                    if self.bounding_box.contains_point((event.x, event.y)) {
+                        if event.mouse_btn == MouseButton::Left {
+                            self.revealed = 0;
+                            self.update_game_state(GameState::Init);
+                        }
                     }
                 }
                 _ => (),

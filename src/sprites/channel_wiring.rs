@@ -4,48 +4,36 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 
 #[derive(Debug, Default)]
 pub struct TheChannelWiring<M> {
+    /// The initial sender, created by channel()
+    channel_senders: HashMap<TypeId, Sender<M>>,
+    /// The initial receiver, created by channel()
+    channel_receivers: HashMap<TypeId, Receiver<M>>,
+    /// The senders that a type will be wired to
     senders: HashMap<TypeId, Vec<Sender<M>>>,
-    receivers: HashMap<TypeId, Vec<Receiver<M>>>,
 }
 
 impl<M> TheChannelWiring<M> {
-    /// Wire a channel from a Sender to a Reciever.
+    /// Wire a `Sender` type to a `Receiver` type. This may create a channel for the `Receiver`.
     pub fn wire<S, R>(&mut self)
     where
         S: 'static,
         R: 'static,
     {
-        let (tx, rx) = channel();
+        // get the sender for type R, this can create a (tx,rx) pair
+        // add it to the senders for type S
+        let tx = self.get_or_create_sender::<R>();
         Self::wire_channel::<S, _>(tx, &mut self.senders);
-        Self::wire_channel::<R, _>(rx, &mut self.receivers);
     }
 
-    /// wire only the sender
-    #[allow(dead_code)]
-    pub fn wire_tx<T>(&mut self, tx: Sender<M>)
+    /// Get the `Sender`s and `Receiver` for a type
+    pub fn channels<T>(&mut self) -> (Option<Vec<Sender<M>>>, Option<Receiver<M>>)
     where
         T: 'static,
     {
-        Self::wire_channel::<T, _>(tx, &mut self.senders);
+        (self.extract_senders::<T>(), self.extract_receiver::<T>())
     }
 
-    /// wire only the receiver
-    #[allow(dead_code)]
-    pub fn wire_rx<T>(&mut self, rx: Receiver<M>)
-    where
-        T: 'static,
-    {
-        Self::wire_channel::<T, _>(rx, &mut self.receivers);
-    }
-
-    /// get the `Sender`s and `Receiver`s for a type
-    pub fn channels<T>(&mut self) -> (Option<Vec<Sender<M>>>, Option<Vec<Receiver<M>>>)
-    where
-        T: 'static,
-    {
-        (self.extract_senders::<T>(), self.extract_receivers::<T>())
-    }
-
+    /// Internal function for wiring a
     fn wire_channel<S, T>(channel: T, map: &mut HashMap<TypeId, Vec<T>>)
     where
         S: 'static,
@@ -58,6 +46,28 @@ impl<M> TheChannelWiring<M> {
         }
     }
 
+    /// Get the sender for a type. This may create a channel for the type.
+    fn get_or_create_sender<R>(&mut self) -> Sender<M>
+    where
+        R: 'static,
+    {
+        match self.channel_senders.get(&TypeId::of::<R>()) {
+            Some(tx) => tx.clone(),
+            None => self.create_channel::<R>(),
+        }
+    }
+
+    /// Create a channel and return a clone of the sender
+    fn create_channel<R>(&mut self) -> Sender<M>
+    where
+        R: 'static,
+    {
+        let (tx, rx) = channel();
+        self.channel_senders.insert(TypeId::of::<R>(), tx.clone());
+        self.channel_receivers.insert(TypeId::of::<R>(), rx);
+        tx
+    }
+
     fn extract_senders<S>(&mut self) -> Option<Vec<Sender<M>>>
     where
         S: 'static,
@@ -65,11 +75,11 @@ impl<M> TheChannelWiring<M> {
         Self::extract::<S, _>(&mut self.senders)
     }
 
-    fn extract_receivers<S>(&mut self) -> Option<Vec<Receiver<M>>>
+    fn extract_receiver<R>(&mut self) -> Option<Receiver<M>>
     where
-        S: 'static,
+        R: 'static,
     {
-        Self::extract::<S, _>(&mut self.receivers)
+        self.channel_receivers.remove(&TypeId::of::<R>())
     }
 
     fn extract<R, T>(map: &mut HashMap<TypeId, Vec<T>>) -> Option<Vec<T>>
@@ -116,28 +126,24 @@ mod tests {
     struct Exchange {
         messages: Vec<Message>,
         senders: Vec<Sender<Message>>,
-        receivers: Vec<Receiver<Message>>,
+        receiver: Option<Receiver<Message>>,
     }
 
     impl Exchange {
-        fn new(
-            senders: Option<Vec<Sender<Message>>>,
-            receivers: Option<Vec<Receiver<Message>>>,
-        ) -> Self {
+        fn new(senders: Option<Vec<Sender<Message>>>, receiver: Option<Receiver<Message>>) -> Self {
             Self {
                 messages: Vec::new(),
                 senders: senders.unwrap(),
-                receivers: receivers.unwrap(),
+                receiver: receiver,
             }
         }
     }
 
     impl MessageExchange for Exchange {
         fn pull(&mut self) {
-            for rx in self.receivers.iter() {
-                match rx.try_recv() {
-                    Ok(message) => self.messages.push(message),
-                    Err(_e) => {}
+            if let Some(receiver) = &self.receiver {
+                for message in receiver.try_iter() {
+                    self.messages.push(message)
                 }
             }
         }
@@ -157,11 +163,11 @@ mod tests {
     }
     impl Obj1 {
         fn new(wiring: &mut TheChannelWiring<Message>) -> Self {
-            let (senders, receivers) = wiring.channels::<Self>();
+            let (senders, receiver) = wiring.channels::<Self>();
             let exchange = Exchange {
                 messages: Vec::new(),
                 senders: senders.unwrap(),
-                receivers: receivers.unwrap(),
+                receiver: receiver,
             };
             Self { exchange }
         }
@@ -182,11 +188,11 @@ mod tests {
     }
     impl Obj2 {
         fn new(wiring: &mut TheChannelWiring<Message>) -> Self {
-            let (senders, receivers) = wiring.channels::<Obj2>();
+            let (senders, receiver) = wiring.channels::<Obj2>();
             let exchange = Exchange {
                 messages: Vec::new(),
                 senders: senders.unwrap(),
-                receivers: receivers.unwrap(),
+                receiver: receiver,
             };
             Self { exchange }
         }
@@ -207,11 +213,11 @@ mod tests {
     }
     impl Obj3 {
         fn new(wiring: &mut TheChannelWiring<Message>) -> Self {
-            let (senders, receivers) = wiring.channels::<Obj3>();
+            let (senders, receiver) = wiring.channels::<Obj3>();
             let exchange = Exchange {
                 messages: Vec::new(),
                 senders: senders.unwrap(),
-                receivers: receivers.unwrap(),
+                receiver: receiver,
             };
             Self { exchange }
         }
@@ -230,43 +236,45 @@ mod tests {
     fn test_simple_wiring() {
         let mut wire_channel = TheChannelWiring::<Message>::default();
         wire_channel.wire::<Obj1, Obj2>();
-        assert_eq!(wire_channel.senders.len(), 1);
-        assert_eq!(wire_channel.receivers.len(), 1);
 
-        let (senders, receivers) = wire_channel.channels::<Obj1>();
+        let (senders, receiver) = wire_channel.channels::<Obj1>();
         assert!(senders.is_some());
-        assert!(receivers.is_none());
+        assert!(receiver.is_none());
         assert_eq!(senders.unwrap().len(), 1);
 
-        let (senders, receivers) = wire_channel.channels::<Obj2>();
+        let (senders, receiver) = wire_channel.channels::<Obj2>();
         assert!(senders.is_none());
-        assert!(receivers.is_some());
-        assert_eq!(receivers.unwrap().len(), 1);
+        assert!(receiver.is_some());
     }
 
     #[test]
     fn test_complex_wiring() {
+        struct TestWiring; // need for test's wiring
+
         let mut wire_channel = TheChannelWiring::<Message>::default();
         wire_channel.wire::<Obj1, Obj2>();
         wire_channel.wire::<Obj2, Obj3>();
-
-        let (sender, rx) = channel::<Message>();
-        wire_channel.wire_rx::<Obj1>(rx);
-
-        let (tx, receiver) = channel::<Message>();
-        wire_channel.wire_tx::<Obj3>(tx);
+        wire_channel.wire::<TestWiring, Obj1>();
+        wire_channel.wire::<Obj3, TestWiring>();
 
         use std::boxed::Box;
-        let mut obj1 = Box::new(Obj1::new(&mut wire_channel));
-        let mut obj2 = Box::new(Obj2::new(&mut wire_channel));
-        let mut obj3 = Box::new(Obj3::new(&mut wire_channel));
+        let obj1 = Box::new(Obj1::new(&mut wire_channel));
+        let obj2 = Box::new(Obj2::new(&mut wire_channel));
+        let obj3 = Box::new(Obj3::new(&mut wire_channel));
         let mut objs: Vec<Box<dyn MessageExchange>> = Vec::new();
         objs.push(obj1 as Box<dyn MessageExchange>);
         objs.push(obj2 as Box<dyn MessageExchange>);
         objs.push(obj3 as Box<dyn MessageExchange>);
 
+        let (senders, receiver) = wire_channel.channels::<TestWiring>();
+        let receiver = receiver.unwrap();
+        let senders = senders.unwrap();
+        let sender = senders.first().unwrap();
+
         // send the message
-        sender.send(Message::StateChanged(TestState::Initialized));
+        sender
+            .send(Message::StateChanged(TestState::Initialized))
+            .unwrap();
         assert!(receiver.try_recv().is_err());
 
         // move the message through the chain

@@ -10,7 +10,7 @@ pub mod message_exchange;
 pub use message_exchange::{ChannelMessage, ChannelWiring, Exchange, MessageExchange};
 
 pub use sprites::GameState;
-pub use sprites::{MouseButton, MouseEvent, MouseHandler, Renderer, RendererContext, Sprite};
+pub use sprites::{MouseButton, MouseEventData, Renderer, RendererContext, Sprite};
 
 pub mod background;
 pub use background::Background;

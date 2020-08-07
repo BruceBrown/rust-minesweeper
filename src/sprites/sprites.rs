@@ -9,7 +9,7 @@ pub use super::{Point, Rect, SystemTime};
 pub fn render_digit(
     digit: u64,
     bounding_box: Rect,
-    context: &dyn RendererContext,
+    context: &Box<dyn RendererContext>,
 ) -> Result<(), String> {
     let image = context.load_digit(digit)?;
     context.render_image(&image, None, bounding_box)?;
@@ -52,21 +52,15 @@ pub enum MouseButton {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct MouseEvent {
+pub struct MouseEventData {
     pub x: i32,
     pub y: i32,
     pub mouse_btn: MouseButton,
 }
 
-pub trait MouseHandler {
-    fn hit_test(&self, _event: &MouseEvent) -> bool {
-        false
-    }
-    fn handle_event(&mut self, _event: &MouseEvent) {}
-}
 
 use crate::sprites::MessageExchange;
-pub trait Sprite: Renderer + MouseHandler + MessageExchange {}
+pub trait Sprite: MessageExchange {}
 
 pub trait RendererContext {
     fn render_image(&self, texture: &Texture, src: Option<Rect>, dst: Rect) -> Result<(), String>;
@@ -74,6 +68,7 @@ pub trait RendererContext {
     fn load(&self, name: &str) -> Result<Rc<Texture>, String>;
     fn load_digit(&self, value: u64) -> Result<Rc<Texture>, String>;
     fn load_tile(&self, value: u64) -> Result<Rc<Texture>, String>;
+    fn end_rendering(&self);
 }
 
 pub trait Renderer {

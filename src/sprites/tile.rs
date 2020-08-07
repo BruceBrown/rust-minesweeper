@@ -1,7 +1,7 @@
 use crate::sprites::{ChannelMessage, Exchange, MessageExchange};
 use crate::sprites::{Error, Rect};
 use crate::sprites::{GameState, Sprite};
-use crate::sprites::{MouseButton, MouseEvent, MouseHandler, Renderer, RendererContext};
+use crate::sprites::{MouseButton, MouseEventData, Renderer, RendererContext};
 
 pub struct Tile {
     is_revealed: bool,
@@ -37,7 +37,7 @@ impl Tile {
 
     fn try_clear(&self) {
         if self.adjacent_flags == self.adjacent_mines {
-            self.exchange.push(ChannelMessage::Clear);
+            self.exchange.push_message(ChannelMessage::Clear);
         }
     }
 
@@ -46,7 +46,7 @@ impl Tile {
             self.is_revealed = true;
             let has_adjacent_mines = self.adjacent_mines > 0;
             self.exchange
-                .push(ChannelMessage::Revealed(self.is_mine, has_adjacent_mines));
+                .push_message(ChannelMessage::Revealed(self.is_mine, has_adjacent_mines));
         }
     }
 
@@ -58,7 +58,8 @@ impl Tile {
             return;
         }
         self.is_flagged = !self.is_flagged;
-        self.exchange.push(ChannelMessage::Flagged(self.is_flagged));
+        self.exchange
+            .push_message(ChannelMessage::Flagged(self.is_flagged));
     }
 
     fn handle_game_state_changed(&mut self, state: &GameState) {
@@ -79,10 +80,8 @@ impl Tile {
             _ => {}
         }
     }
-}
 
-impl Renderer for Tile {
-    fn render(&self, context: &dyn RendererContext) -> Result<(), Error> {
+    fn render(&self, context: &Box<dyn RendererContext>) -> Result<(), Error> {
         if self.is_revealed {
             if self.is_mine {
                 let image = context.load("tile_mine")?;
@@ -102,26 +101,6 @@ impl Renderer for Tile {
     }
 }
 
-impl MouseHandler for Tile {
-    fn hit_test(&self, event: &MouseEvent) -> bool {
-        self.bounding_box.contains_point((event.x, event.y))
-    }
-    fn handle_event(&mut self, event: &MouseEvent) {
-        match event.mouse_btn {
-            MouseButton::Left => {
-                if self.is_revealed {
-                    self.try_clear();
-                } else {
-                    self.reveal();
-                }
-            }
-            MouseButton::Right => {
-                self.try_toggle_flag();
-            }
-            _ => {}
-        }
-    }
-}
 
 impl MessageExchange for Tile {
     fn pull(&mut self) -> u32 {
@@ -134,6 +113,24 @@ impl MessageExchange for Tile {
                 ChannelMessage::Clear => self.reveal(),
                 ChannelMessage::Flagged(true) => self.adjacent_flags += 1,
                 ChannelMessage::Flagged(false) => self.adjacent_flags -= 1,
+                ChannelMessage::Render(context) => self.render(&context).unwrap(),
+                ChannelMessage::MouseEvent(event) => {
+                    if self.bounding_box.contains_point((event.x, event.y)) {
+                        match event.mouse_btn {
+                            MouseButton::Left => {
+                                if self.is_revealed {
+                                    self.try_clear();
+                                } else {
+                                    self.reveal();
+                                }
+                            }
+                            MouseButton::Right => {
+                                self.try_toggle_flag();
+                            }
+                            _ => {}
+                        }
+                    }
+                },
                 _ => (),
             }
         }

@@ -1,7 +1,7 @@
 use crate::sprites::render_digit;
 use crate::sprites::Error;
 use crate::sprites::GameState;
-use crate::sprites::{MouseHandler, Renderer, RendererContext, Sprite};
+use crate::sprites::{Renderer, RendererContext, Sprite};
 
 use crate::sprites::SystemTime;
 
@@ -23,38 +23,8 @@ impl TimeCounter {
             exchange: Exchange::new_from_wiring::<TimeCounter>(wiring),
         }
     }
-}
 
-impl MessageExchange for TimeCounter {
-    fn pull(&mut self) -> u32 {
-        let count = self.exchange.pull();
-        for message in self.exchange.get_messages().iter() {
-            match message {
-                ChannelMessage::GameStateChanged(GameState::Init) => {
-                    self.running = false;
-                    self.elapsed = 0;
-                }
-                ChannelMessage::GameStateChanged(GameState::Playing) => {
-                    self.running = true;
-                    self.start = SystemTime::now();
-                }
-                ChannelMessage::GameStateChanged(GameState::Win) => {
-                    self.running = false;
-                    self.elapsed = self.start.elapsed().unwrap().as_secs();
-                }
-                ChannelMessage::GameStateChanged(GameState::Lose) => {
-                    self.running = false;
-                    self.elapsed = self.start.elapsed().unwrap().as_secs();
-                }
-                _ => (),
-            }
-        }
-        count
-    }
-}
-
-impl Renderer for TimeCounter {
-    fn render(&self, context_: &dyn RendererContext) -> Result<(), Error> {
+    fn render(&self, context_: &Box<dyn RendererContext>) -> Result<(), Error> {
         let elapsed = if self.running {
             self.start
                 .elapsed()
@@ -83,6 +53,33 @@ impl Renderer for TimeCounter {
     }
 }
 
-impl MouseHandler for TimeCounter {}
+impl MessageExchange for TimeCounter {
+    fn pull(&mut self) -> u32 {
+        let count = self.exchange.pull();
+        for message in self.exchange.get_messages().iter() {
+            match message {
+                ChannelMessage::GameStateChanged(GameState::Init) => {
+                    self.running = false;
+                    self.elapsed = 0;
+                }
+                ChannelMessage::GameStateChanged(GameState::Playing) => {
+                    self.running = true;
+                    self.start = SystemTime::now();
+                }
+                ChannelMessage::GameStateChanged(GameState::Win) => {
+                    self.running = false;
+                    self.elapsed = self.start.elapsed().unwrap().as_secs();
+                }
+                ChannelMessage::GameStateChanged(GameState::Lose) => {
+                    self.running = false;
+                    self.elapsed = self.start.elapsed().unwrap().as_secs();
+                }
+                ChannelMessage::Render(context) => self.render(&context).unwrap(),
+                _ => (),
+            }
+        }
+        count
+    }
+}
 
 impl Sprite for TimeCounter {}

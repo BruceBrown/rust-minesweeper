@@ -39,58 +39,22 @@ mod sdl2_minesweeper {
 
     extern crate minesweeperlib;
     use crate::minesweeperlib::MessageExchange;
+    use crate::minesweeperlib::{ChannelMessage, MouseButton, MouseEvent, MouseHandler};
     use crate::minesweeperlib::{
         Error, Game, Layout, Rect, Renderer, RendererContext, ResourceContainer, Texture,
         TextureManager,
     };
-    use crate::minesweeperlib::{MouseButton, MouseEvent, MouseHandler};
 
-    pub struct Minesweeper {
+    struct RenderingContext {
         pub texture_creator: sdl2::render::TextureCreator<sdl2::video::WindowContext>,
         pub canvas: RefCell<sdl2::render::WindowCanvas>,
         pub layout: Layout,
-        pub game: Game,
         pub texture_manager: TextureManager,
         pub digits: Vec<String>,
         pub tiles: Vec<String>,
     }
 
-    impl Minesweeper {
-        fn new(canvas: sdl2::render::WindowCanvas) -> Self {
-            let layout = Layout::new();
-            let texture_creator = canvas.texture_creator();
-            let texture_manager = ResourceContainer::new_texture_manager();
-            let canvas = RefCell::new(canvas);
-            let digits = [
-                "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
-            ];
-            let tiles = [
-                "none", "one", "two", "three", "four", "five", "six", "seven", "eight",
-            ];
-            Self {
-                texture_creator: texture_creator,
-                canvas: canvas,
-                layout: layout,
-                game: Game::new(layout),
-                texture_manager: texture_manager,
-                digits: digits.iter().map(|s| s.to_string()).collect(),
-                tiles: tiles.iter().map(|s| s.to_string()).collect(),
-            }
-        }
-
-        fn render(&self) {
-            let _ = self.game.render(self);
-            self.canvas.borrow_mut().present();
-        }
-
-        fn handle_event(&mut self, event: &MouseEvent) {
-            self.game.handle_event(event);
-            // since we're not running threads on the channels, perform a complete pull
-            while self.game.pull() > 0 {}
-        }
-    }
-
-    impl RendererContext for Minesweeper {
+    impl RendererContext for RenderingContext {
         fn render_image(
             &self,
             texture: &Texture,
@@ -112,6 +76,7 @@ mod sdl2_minesweeper {
                             .texture_creator
                             .create_texture_from_surface(&surface)
                             .unwrap();
+                        let _result = self.canvas.borrow_mut().copy(&image, src, dst);
                         texture.set_image_data(Some(ResourceContainer::new(image)));
                     }
                     None => {}
@@ -138,6 +103,62 @@ mod sdl2_minesweeper {
             let name = &self.tiles[value as usize];
             let image_name = format!("tile_{}", name);
             self.load(&image_name)
+        }
+        fn end_rendering(&self) {
+            self.canvas.borrow_mut().present();
+        }
+    }
+
+    pub struct Minesweeper {
+        pub layout: Layout,
+        pub game: Game,
+        game_sender: std::sync::mpsc::Sender<ChannelMessage>,
+        rendering_context: Rc<Box<dyn RendererContext>>,
+    }
+
+    impl Minesweeper {
+        fn new(canvas: sdl2::render::WindowCanvas) -> Self {
+            let layout = Layout::new();
+            let texture_creator = canvas.texture_creator();
+            let texture_manager = ResourceContainer::new_texture_manager();
+            let canvas = RefCell::new(canvas);
+            let digits = [
+                "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+            ];
+            let tiles = [
+                "none", "one", "two", "three", "four", "five", "six", "seven", "eight",
+            ];
+            let rendering_context = RenderingContext {
+                texture_creator: texture_creator,
+                canvas: canvas,
+                layout: layout,
+                texture_manager: texture_manager,
+                digits: digits.iter().map(|s| s.to_string()).collect(),
+                tiles: tiles.iter().map(|s| s.to_string()).collect(),
+            };
+            let context = Rc::new(Box::new(rendering_context) as Box<dyn RendererContext>);
+            let game = Game::new(layout);
+            let sender = game.get_sender();
+            Self {
+                layout: layout,
+                game: game,
+                game_sender: sender,
+                rendering_context: context,
+            }
+        }
+        
+        fn render(&mut self) {
+            let message = ChannelMessage::Render(Rc::clone(&self.rendering_context));
+            self.game_sender.send(message).unwrap();
+            while self.game.pull() > 0 {}
+            self.rendering_context.end_rendering();
+        }
+
+        fn handle_event(&mut self, event: MouseEventData) {
+            let message = ChannelMessage::MouseEvent(event);
+            self.game_sender.send(message).unwrap();
+            // since we're not running threads on the channels, perform a complete pull
+            while self.game.pull() > 0 {}
         }
     }
 
@@ -175,7 +196,7 @@ mod sdl2_minesweeper {
                     Event::MouseButtonDown {
                         x, y, mouse_btn, ..
                     } => {
-                        let mouse_event = MouseEvent {
+                        let mouse_event = MouseEventData {
                             x: x,
                             y: y,
                             mouse_btn: match mouse_btn {
@@ -186,7 +207,8 @@ mod sdl2_minesweeper {
                                 _ => MouseButton::Middle,
                             },
                         };
-                        minesweeper.handle_event(&mouse_event);
+                        minesweeper.handle_event(mouse_event);
+                        minesweeper.render();
                     }
                     _ => (),
                 },

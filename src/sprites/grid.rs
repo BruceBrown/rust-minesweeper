@@ -5,7 +5,7 @@ use crate::config::Layout;
 use crate::sprites::GameState;
 use crate::sprites::{ChannelMessage, ChannelWiring, Exchange, MessageExchange};
 use crate::sprites::{Error, Rect};
-use crate::sprites::{MouseEvent, MouseHandler, Renderer, RendererContext};
+use crate::sprites::{Renderer, RendererContext};
 use crate::sprites::{Sprite, Tile};
 
 pub struct Grid {
@@ -90,8 +90,8 @@ impl Grid {
             };
             layout.options.for_each_neighbor(index as u16, closure);
             let bounding_box = layout.grid_tile(index);
-            let receiver = tile_channels[index as usize].get_receiver().unwrap();
-            let tile_exchange = Exchange::new(neighbors, vec![receiver]);
+            let receiver = tile_channels[index as usize].get_receiver();
+            let tile_exchange = Exchange::new(neighbors, receiver);
             let mut tile = Tile::new(tile_exchange, bounding_box);
             let adjacent_mines = minefield.adjacent_mines(index as u16);
             let is_mine = minefield.mine_at(index);
@@ -114,10 +114,23 @@ impl MessageExchange for Grid {
                         let adjacent_mines = self.minefield.adjacent_mines(index as u16);
                         self.tiles[index].reset(is_mine, adjacent_mines);
                     }
-                    self.exchange.push(message.clone());
+                    self.exchange.push_message(message.clone());
                 }
-                ChannelMessage::GameStateChanged(_state) => self.exchange.push(message.clone()),
-                ChannelMessage::FlagStateChanged(_exhausted) => self.exchange.push(message.clone()),
+                ChannelMessage::GameStateChanged(_state) => {
+                    self.exchange.push_message(message.clone())
+                }
+                ChannelMessage::FlagStateChanged(_exhausted) => {
+                    self.exchange.push_message(message.clone())
+                }
+                ChannelMessage::Render(_) => self.exchange.push_message(message.clone()),
+                ChannelMessage::MouseEvent(event) => {
+                    if self.bounding_box.contains_point((event.x, event.y)) {
+                        let column = (event.x - self.bounding_box.left()) / Layout::tile_side() as i32;
+                        let row = (event.y - self.bounding_box.top()) / Layout::tile_side() as i32;
+                        let index = self.layout.options.index(row as i16, column as i16) as usize;
+                        self.exchange.push_message_to_index(message.clone(), index as usize);
+                    }
+                }
                 _ => (),
             }
         }
@@ -128,26 +141,6 @@ impl MessageExchange for Grid {
     }
 }
 
-impl Renderer for Grid {
-    fn render(&self, context: &dyn RendererContext) -> Result<(), Error> {
-        for sprite in self.tiles.iter() {
-            sprite.render(context)?;
-        }
-        Ok(())
-    }
-}
-
-impl MouseHandler for Grid {
-    fn hit_test(&self, event: &MouseEvent) -> bool {
-        self.bounding_box.contains_point((event.x, event.y))
-    }
-    fn handle_event(&mut self, event: &MouseEvent) {
-        let column = (event.x - self.bounding_box.left()) / Layout::tile_side() as i32;
-        let row = (event.y - self.bounding_box.top()) / Layout::tile_side() as i32;
-        let index = self.layout.options.index(row as i16, column as i16) as usize;
-        self.tiles[index].handle_event(event);
-    }
-}
 
 impl Sprite for Grid {}
 
